@@ -2,9 +2,6 @@ import React, { useState, useEffect } from "react";
 import { FiSave, FiTrash2 } from "react-icons/fi";
 import PurchaseDetail from "./PurchaseDetail";
 
-
-
-
 const PurchaseRequest = ({ usuario, onBack }) => {
   const barcos = ["Dacil", "Herbania", "Hesperides", "Tinerfe"];
   const [buqueSeleccionado, setBuqueSeleccionado] = useState("");
@@ -48,11 +45,13 @@ const PurchaseRequest = ({ usuario, onBack }) => {
 
     const nueva = {
       ...formulario,
+      numeroPedido: String(formulario.numeroPedido), // 🟢 FORZAMOS A STRING
       buque: buqueSeleccionado,
       usuario: usuario.nombre,
-      fecha: new Date().toLocaleDateString(),
+      fecha: formulario.fechaPedido || new Date().toLocaleDateString(),
       estado: "Solicitud de compra",
     };
+
 
     const actual = solicitudesPorBuque[buqueSeleccionado] || [];
     const actualizadas =
@@ -88,13 +87,27 @@ const PurchaseRequest = ({ usuario, onBack }) => {
 
   const handleEditar = (index) => {
     const solicitud = solicitudesPorBuque[buqueSeleccionado][index];
-    setFormulario({ ...solicitud });
+
+    const fechaPedidoISO = solicitud.fechaPedido
+      ? new Date(solicitud.fechaPedido).toISOString().split("T")[0]
+      : "";
+
+    const fechaEntregaISO = solicitud.fechaEntrega
+      ? new Date(solicitud.fechaEntrega).toISOString().split("T")[0]
+      : "";
+
+    setFormulario({
+      ...solicitud,
+      fechaPedido: fechaPedidoISO,
+      fechaEntrega: fechaEntregaISO,
+    });
     setEditarIndex(index);
   };
+
   const handleEliminar = (index) => {
     const confirm = window.confirm("¿Estás seguro de que deseas eliminar esta solicitud?");
     if (!confirm) return;
-  
+
     const actual = solicitudesPorBuque[buqueSeleccionado] || [];
     const actualizadas = actual.filter((_, i) => i !== index);
     setSolicitudesPorBuque({
@@ -102,13 +115,13 @@ const PurchaseRequest = ({ usuario, onBack }) => {
       [buqueSeleccionado]: actualizadas,
     });
   };
-  
+
   const handleVerDetalle = (solicitud) => {
     setDetallePedido(solicitud);
   };
 
   if (detallePedido) {
-    return <PurchaseDetail pedido={detallePedido} onBack={() => setDetallePedido(null)} />;
+    return <PurchaseDetail pedido={detallePedido} volver={() => setDetallePedido(null)} />;
   }
 
   if (!buqueSeleccionado) {
@@ -153,7 +166,6 @@ const PurchaseRequest = ({ usuario, onBack }) => {
         </button>
       </div>
 
-      {/* FORMULARIO EN FORMATO TABLA */}
       <form onSubmit={handleSubmit} className="mb-6">
         <table className="w-full border border-gray-300 text-sm bg-white rounded-md">
           <thead className="bg-gray-100 text-left">
@@ -178,9 +190,9 @@ const PurchaseRequest = ({ usuario, onBack }) => {
               <td className="p-2">
                 <select name="urgencia" value={formulario.urgencia} onChange={handleChange} required className="border p-2 w-full rounded">
                   <option value="">Seleccionar</option>
-                  <option value="Bajo">Bajo</option>
-                  <option value="Medio">Medio</option>
-                  <option value="Alto">Alto</option>
+                  <option value="Normal">Normal</option>
+                  <option value="Medio">Urgente</option>
+                  <option value="Alto">Muy Urgente</option>
                 </select>
               </td>
               <td className="p-2">
@@ -208,7 +220,6 @@ const PurchaseRequest = ({ usuario, onBack }) => {
         </div>
       </form>
 
-      {/* TABLA DE REGISTROS */}
       <div className="mt-10">
         <h3 className="font-semibold text-lg mb-4">📋 Solicitudes registradas</h3>
         <table className="min-w-full border border-gray-400 text-sm bg-white">

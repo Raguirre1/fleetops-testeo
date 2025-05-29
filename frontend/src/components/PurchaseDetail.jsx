@@ -1,233 +1,315 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import PropTypes from "prop-types";
+import ExcelUploadCotizacion from "./ExcelUploadCotizacion";
+import CotizacionProveedor from "./CotizacionProveedor";
+
+const BACKEND_URL = "";
 
 const PurchaseDetail = ({ pedido, volver }) => {
   const [comentarios, setComentarios] = useState("");
   const [infoAdicional, setInfoAdicional] = useState("");
   const [archivos, setArchivos] = useState([]);
   const [archivosSubidos, setArchivosSubidos] = useState([]);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const pedidoKey = `detalle-${pedido.numeroPedido}`;
 
   useEffect(() => {
-    // Cargar info adicional desde localStorage
-    const guardado = localStorage.getItem(pedidoKey);
-    if (guardado) {
-      const datos = JSON.parse(guardado);
-      setComentarios(datos.comentarios || "");
-      setInfoAdicional(datos.infoAdicional || "");
-    }
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const savedData = localStorage.getItem(pedidoKey);
+        if (savedData) {
+          const { comentarios: savedComentarios, infoAdicional: savedInfo } = JSON.parse(savedData);
+          setComentarios(savedComentarios || "");
+          setInfoAdicional(savedInfo || "");
+        }
 
-    // Obtener archivos subidos
-    axios
-      .get(`http://localhost:5000/uploads/${pedido.numeroPedido}`)
-      .then((res) => setArchivosSubidos(res.data.archivos))
-      .catch((err) => console.error("Error al obtener archivos:", err));
+        const { data } = await axios.get(`${BACKEND_URL}/uploads/${pedido.numeroPedido}`);
+        setArchivosSubidos(Array.isArray(data.archivos) ? data.archivos : []);
+      } catch (err) {
+        setError("Error al cargar los datos. Revisa la consola para más detalles.");
+        console.error("Error en loadData:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
   }, [pedido.numeroPedido]);
 
-  const guardarInfo = () => {
-    localStorage.setItem(
-      pedidoKey,
-      JSON.stringify({ comentarios, infoAdicional })
-    );
-    alert("Información adicional guardada ✅");
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    validateFiles(files);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
+    setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    setArchivos(files);
+    validateFiles(files);
   };
 
-  const handleFileChange = (e) => {
-    setArchivos(Array.from(e.target.files));
-  };
+  const validateFiles = (files) => {
+    const MAX_SIZE = 10 * 1024 * 1024;
+    const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf", "eml", "msg"];
 
-  const subirArchivos = async () => {
-    if (archivos.length === 0) {
-      alert("No hay archivos para subir.");
-      return;
-    }
-
-    const formData = new FormData();
-    archivos.forEach((file) => {
-      formData.append("archivos", file);
+    const validFiles = files.filter(file => {
+      const ext = file.name.split(".").pop().toLowerCase();
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        setError(`Tipo de archivo no permitido: ${file.name}`);
+        return false;
+      }
+      if (file.size > MAX_SIZE) {
+        setError(`El archivo ${file.name} excede el límite de 10MB`);
+        return false;
+      }
+      return true;
     });
 
-    try {
-      await axios.post(
-        `http://localhost:5000/upload/${pedido.numeroPedido}`,
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
-
-      setArchivos([]);
-      // Actualizar lista de archivos subidos
-      const res = await axios.get(`http://localhost:5000/uploads/${pedido.numeroPedido}`);
-      setArchivosSubidos(res.data.archivos);
-      alert("Archivos subidos correctamente ✅");
-    } catch (err) {
-      console.error("Error al subir archivos:", err);
-      alert("❌ Error al subir archivos");
+    if (validFiles.length > 0) {
+      setArchivos(validFiles);
+      setError("");
     }
   };
 
-  const eliminarArchivo = async (nombreArchivo) => {
-    const confirm = window.confirm(`¿Eliminar archivo ${nombreArchivo}?`);
-    if (!confirm) return;
+  const uploadFiles = async () => {
+    if (archivos.length === 0) return;
+
+    const formData = new FormData();
+    archivos.forEach(file => formData.append("archivos", file));
 
     try {
-      await axios.delete(`http://localhost:5000/uploads/${pedido.numeroPedido}/${nombreArchivo}`);
-      setArchivosSubidos((prev) =>
-        prev.filter((archivo) => archivo.nombre !== nombreArchivo)
-      );
+      setIsLoading(true);
+      const res = await axios.post(`${BACKEND_URL}/upload/${pedido.numeroPedido}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+
+      if (res.status === 200 && Array.isArray(res.data.archivos)) {
+        setArchivosSubidos(res.data.archivos);
+      } else {
+        const refresh = await axios.get(`${BACKEND_URL}/uploads/${pedido.numeroPedido}`);
+        setArchivosSubidos(refresh.data.archivos || []);
+      }
+
+      setArchivos([]);
+      setSuccessMessage("¡Archivos subidos correctamente!");
+      setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err) {
-      console.error("Error al eliminar archivo:", err);
-      alert("❌ No se pudo eliminar el archivo");
+      setError("Error al subir archivos.");
+      console.error("uploadFiles error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteFile = async (fileName) => {
+    try {
+      await axios.delete(`${BACKEND_URL}/uploads/${pedido.numeroPedido}/${fileName}`);
+      setArchivosSubidos(prev => prev.filter(file => file !== fileName));
+      setSuccessMessage(`Archivo ${fileName} eliminado.`);
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err) {
+      setError(`Error al eliminar archivo: ${fileName}`);
+      console.error("handleDeleteFile error:", err);
+    }
+  };
+
+  const saveLocalData = () => {
+    try {
+      localStorage.setItem(pedidoKey, JSON.stringify({ comentarios, infoAdicional }));
+      setSuccessMessage("¡Datos guardados localmente!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err) {
+      setError("Error al guardar en localStorage. ¿Modo incógnito?");
+      console.error("Error en saveLocalData:", err);
     }
   };
 
   return (
-    <div className="p-6 bg-white rounded-md shadow-md">
+    <div className="p-6 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4">Detalle del Pedido</h2>
+      <p className="text-lg font-medium mb-6 text-gray-700">Nº de Pedido: {pedido.numeroPedido}</p>
+
+      <div className="mb-6 space-y-1 text-gray-700">
+        {pedido.tituloPedido && <p><strong>Título:</strong> {pedido.tituloPedido}</p>}
+        {pedido.buque && <p><strong>Buque:</strong> {pedido.buque}</p>}
+        {pedido.usuario && <p><strong>Solicitante:</strong> {pedido.usuario}</p>}
+        {pedido.urgencia && <p><strong>Urgencia:</strong> {pedido.urgencia}</p>}
+        {pedido.fechaPedido && <p><strong>Fecha de pedido:</strong> {pedido.fechaPedido}</p>}
+        {pedido.fechaEntrega && <p><strong>Fecha de entrega:</strong> {pedido.fechaEntrega}</p>}
+        {pedido.numeroCuenta && <p><strong>Cuenta contable:</strong> {pedido.numeroCuenta}</p>}
+        {pedido.estado && <p><strong>Estado:</strong> {pedido.estado}</p>}
+        {pedido.archivoAdjunto && (
+          <p>
+            <strong>Archivo adjunto:</strong>{" "}
+            <a
+              href={URL.createObjectURL(pedido.archivoAdjunto)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+            >
+              {pedido.archivoAdjunto.name}
+            </a>
+          </p>
+        )}
+      </div>
+
+      {error && <div className="bg-red-100 text-red-800 p-3 mb-4 rounded">{error}</div>}
+      {successMessage && <div className="bg-green-100 text-green-800 p-3 mb-4 rounded">{successMessage}</div>}
+
+      <div className="grid gap-6 mb-8">
+        <div>
+          <label className="block mb-2 font-medium">Comentarios</label>
+          <textarea
+            value={comentarios}
+            onChange={(e) => setComentarios(e.target.value)}
+            className="w-full p-3 border rounded"
+            rows={4}
+          />
+        </div>
+
+        <div>
+          <label className="block mb-2 font-medium">Información adicional</label>
+          <textarea
+            value={infoAdicional}
+            onChange={(e) => setInfoAdicional(e.target.value)}
+            className="w-full p-3 border rounded"
+            rows={4}
+          />
+        </div>
+      </div>
+
       <button
-        onClick={volver}
-        className="mb-4 text-blue-600 hover:underline text-sm"
+        onClick={saveLocalData}
+        disabled={isLoading}
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
       >
-        ← Volver a la lista
+        Guardar cambios
       </button>
 
-      <h2 className="text-xl font-bold mb-4">
-        Detalle del Pedido: {pedido.numeroPedido}
-      </h2>
+      <div className="mt-12">
+        <h3 className="text-xl font-semibold mb-4">Documentación Adicional</h3>
 
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div>
-          <p><strong>Buque:</strong> {pedido.buque}</p>
-          <p><strong>Título:</strong> {pedido.tituloPedido}</p>
-          <p><strong>Urgencia:</strong> {pedido.urgencia}</p>
-          <p><strong>Fecha del pedido:</strong> {pedido.fecha}</p>
-        </div>
-        <div>
-          <p><strong>Solicitante:</strong> {pedido.usuario}</p>
-          <p><strong>Cuenta contable:</strong> {pedido.numeroCuenta || "N/A"}</p>
-          <p><strong>Fecha límite:</strong> {pedido.fechaEntrega || "No definida"}</p>
-        </div>
-      </div>
-
-      {/* Archivo adjunto original */}
-      {pedido.archivoAdjunto && (
-        <div className="mb-6">
-          <h3 className="font-semibold mb-1">📎 Pedido adjunto:</h3>
-          <a
-            href={URL.createObjectURL(pedido.archivoAdjunto)}
-            download={pedido.archivoAdjunto.name}
-            className="text-blue-600 underline"
+        <div
+          className={`border-2 border-dashed p-8 text-center rounded-lg mb-4 ${
+            isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+        >
+          <p>Arrastra archivos aquí o</p>
+          <input
+            type="file"
+            id="file-upload"
+            className="hidden"
+            multiple
+            accept=".jpg,.jpeg,.png,.pdf,.eml,.msg"
+            onChange={handleFileChange}
+          />
+          <label
+            htmlFor="file-upload"
+            className="inline-block mt-2 px-4 py-2 bg-gray-100 rounded cursor-pointer hover:bg-gray-200"
           >
-            Descargar {pedido.archivoAdjunto.name}
-          </a>
-        </div>
-      )}
-
-      {/* Área de subida de archivos */}
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        className="border-2 border-dashed border-gray-400 p-6 rounded mb-4 bg-white text-center cursor-pointer"
-      >
-        <p className="text-gray-700 font-medium">
-          📁 Arrastra aquí los archivos o{" "}
-          <label className="text-blue-600 underline cursor-pointer">
-            haz clic
-            <input
-              type="file"
-              multiple
-              onChange={handleFileChange}
-              className="hidden"
-            />
+            Seleccionar archivos
           </label>
-        </p>
-      </div>
-
-      {archivos.length > 0 && (
-        <div className="mb-4">
-          <h4 className="font-semibold mb-2">Archivos seleccionados:</h4>
-          <ul className="text-sm list-disc pl-5">
-            {archivos.map((file, idx) => (
-              <li key={idx}>{file.name}</li>
-            ))}
-          </ul>
-          <button
-            onClick={subirArchivos}
-            className="mt-2 bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700"
-          >
-            Cargar archivos
-          </button>
+          <p className="text-sm text-gray-500 mt-2">Formatos: JPG, PNG, PDF, EML, MSG (Máx. 10MB)</p>
         </div>
-      )}
 
-      {archivosSubidos.length > 0 && (
-        <div className="mb-6">
-          <h4 className="font-semibold mb-2">📄 Archivos subidos:</h4>
-          <ul className="text-sm">
-            {archivosSubidos.map((archivo, index) => (
-              <li
-                key={index}
-                className="text-sm flex justify-between items-center border p-2 mb-2 rounded"
-              >
-                <a
-                  href={`http://localhost:5000/uploads/${pedido.numeroPedido}/${archivo.nombre}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  {archivo.nombre}
-                </a>
-                <button
-                  onClick={() => eliminarArchivo(archivo.nombre)}
-                  className="ml-4 text-red-600 hover:underline text-sm"
-                >
-                  Eliminar
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {archivos.length > 0 && (
+          <div className="mb-6">
+            <h4 className="font-medium mb-2">Archivos a subir:</h4>
+            <ul className="space-y-2">
+              {archivos.map((file, index) => (
+                <li key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <span>{file.name}</span>
+                  <button
+                    onClick={() => setArchivos(archivos.filter((_, i) => i !== index))}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={uploadFiles}
+              disabled={isLoading}
+              className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+            >
+              Subir {archivos.length} archivo(s)
+            </button>
+          </div>
+        )}
 
-      {/* Comentarios */}
-      <div className="mb-4">
-        <label className="block font-semibold mb-1">
-          Información recibida del buque:
-        </label>
-        <textarea
-          value={comentarios}
-          onChange={(e) => setComentarios(e.target.value)}
-          rows="4"
-          className="w-full border rounded p-2"
-          placeholder="Ej: Observaciones, instrucciones, etc."
-        ></textarea>
-      </div>
+        {archivosSubidos.length > 0 && (
+          <div>
+            <h4 className="font-medium mb-2">Archivos existentes:</h4>
+            <ul className="space-y-2">
+              {archivosSubidos.map((file, index) => (
+                <li key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={`${BACKEND_URL}/uploads/${pedido.numeroPedido}/${file}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {file}
+                    </a>
+                    <button
+                      onClick={() => handleDeleteFile(file)}
+                      className="text-red-600 hover:text-red-800 text-xl"
+                      title="Eliminar archivo"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {/* Notas internas */}
-      <div className="mb-6">
-        <label className="block font-semibold mb-1">Notas internas:</label>
-        <input
-          type="text"
-          value={infoAdicional}
-          onChange={(e) => setInfoAdicional(e.target.value)}
-          className="w-full border rounded p-2"
-          placeholder="Ej: Pendiente de cotización, revisar..."
-        />
+        {/* Carga Excel Cotización */}
+        <ExcelUploadCotizacion />
+
+        {/* Carga PDF Cotización por Proveedor */}
+        <CotizacionProveedor pedido={pedido} />
       </div>
 
       <button
-        onClick={guardarInfo}
-        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+        onClick={volver}
+        className="mt-8 bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
       >
-        Guardar información
+        Volver
       </button>
     </div>
   );
+};
+
+PurchaseDetail.propTypes = {
+  pedido: PropTypes.shape({
+    numeroPedido: PropTypes.string.isRequired,
+    tituloPedido: PropTypes.string,
+    buque: PropTypes.string,
+    usuario: PropTypes.string,
+    urgencia: PropTypes.string,
+    fechaPedido: PropTypes.string,
+    fechaEntrega: PropTypes.string,
+    numeroCuenta: PropTypes.string,
+    estado: PropTypes.string,
+    archivoAdjunto: PropTypes.any,
+  }).isRequired,
+  volver: PropTypes.func.isRequired,
 };
 
 export default PurchaseDetail;
