@@ -9,7 +9,13 @@ const app = express();
 const PORT = process.env.PORT;
 const SECRET_KEY = process.env.JWT_SECRET || "mi_clave_secreta";
 
-app.use(cors());
+// ==== CORS CONFIGURADO PARA DESARROLLO ====
+app.use(cors({
+  origin: "*", // 🔓 Puedes reemplazar "*" por un dominio específico en producción
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true,
+}));
+
 app.use(express.json());
 
 // ======== MIDDLEWARE JWT =========
