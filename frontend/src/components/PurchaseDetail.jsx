@@ -4,7 +4,7 @@ import PropTypes from "prop-types";
 import ExcelUploadCotizacion from "./ExcelUploadCotizacion";
 import CotizacionProveedor from "./CotizacionProveedor";
 
-const BACKEND_URL = "";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://fleetops-production.up.railway.app";
 
 const PurchaseDetail = ({ pedido, volver }) => {
   const [comentarios, setComentarios] = useState("");
@@ -30,7 +30,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
         }
 
         const { data } = await axios.get(`${BACKEND_URL}/uploads/${pedido.numeroPedido}`);
-        setArchivosSubidos(Array.isArray(data.archivos) ? data.archivos : []);
+        setArchivosSubidos(data.archivos || []);
       } catch (err) {
         setError("Error al cargar los datos. Revisa la consola para más detalles.");
         console.error("Error en loadData:", err);
@@ -89,13 +89,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
         headers: { "Content-Type": "multipart/form-data" }
       });
 
-      if (res.status === 200 && Array.isArray(res.data.archivos)) {
-        setArchivosSubidos(res.data.archivos);
-      } else {
-        const refresh = await axios.get(`${BACKEND_URL}/uploads/${pedido.numeroPedido}`);
-        setArchivosSubidos(refresh.data.archivos || []);
-      }
-
+      setArchivosSubidos(res.data.archivos || []);
       setArchivos([]);
       setSuccessMessage("¡Archivos subidos correctamente!");
       setTimeout(() => setSuccessMessage(""), 3000);
@@ -110,7 +104,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
   const handleDeleteFile = async (fileName) => {
     try {
       await axios.delete(`${BACKEND_URL}/uploads/${pedido.numeroPedido}/${fileName}`);
-      setArchivosSubidos(prev => prev.filter(file => file !== fileName));
+      setArchivosSubidos(prev => prev.filter(file => file.nombre !== fileName));
       setSuccessMessage(`Archivo ${fileName} eliminado.`);
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err) {
@@ -144,7 +138,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
         {pedido.fechaEntrega && <p><strong>Fecha de entrega:</strong> {pedido.fechaEntrega}</p>}
         {pedido.numeroCuenta && <p><strong>Cuenta contable:</strong> {pedido.numeroCuenta}</p>}
         {pedido.estado && <p><strong>Estado:</strong> {pedido.estado}</p>}
-        {pedido.archivoAdjunto && (
+        {pedido.archivoAdjunto instanceof File && (
           <p>
             <strong>Archivo adjunto:</strong>{" "}
             <a
@@ -258,15 +252,15 @@ const PurchaseDetail = ({ pedido, volver }) => {
                 <li key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                   <div className="flex items-center gap-3">
                     <a
-                      href={`${BACKEND_URL}/uploads/${pedido.numeroPedido}/${file}`}
+                      href={file.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:underline"
                     >
-                      {file}
+                      {file.nombre}
                     </a>
                     <button
-                      onClick={() => handleDeleteFile(file)}
+                      onClick={() => handleDeleteFile(file.nombre)}
                       className="text-red-600 hover:text-red-800 text-xl"
                       title="Eliminar archivo"
                     >
@@ -279,11 +273,8 @@ const PurchaseDetail = ({ pedido, volver }) => {
           </div>
         )}
 
-        {/* Carga Excel Cotización */}
-        <ExcelUploadCotizacion />
-
-        {/* Carga PDF Cotización por Proveedor */}
-        <CotizacionProveedor pedido={pedido} />
+        <ExcelUploadCotizacion numeroPedido={pedido.numeroPedido} />
+        <CotizacionProveedor numeroPedido={pedido.numeroPedido} />
       </div>
 
       <button
