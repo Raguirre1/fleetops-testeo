@@ -6,7 +6,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT;
 const SECRET_KEY = process.env.JWT_SECRET || "mi_clave_secreta";
 
 app.use(cors());
