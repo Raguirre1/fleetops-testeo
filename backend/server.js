@@ -9,15 +9,17 @@ const app = express();
 const PORT = process.env.PORT;
 const SECRET_KEY = process.env.JWT_SECRET || "mi_clave_secreta";
 
-// ==== CORS CONFIGURADO FLEXIBLE PARA Railway y Codespaces ====
-app.use(cors({
-  origin: "*", // ⚠️ Para desarrollo. Puedes restringir en producción si quieres
+// ==== CORS COMPLETO PARA Railway y Codespaces ====
+const corsOptions = {
+  origin: "*", // ⚠️ Cambia a lista blanca en producción
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
-}));
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // 💥 Esta línea es clave
 
 app.use(express.json());
-
 
 // ======== MIDDLEWARE JWT =========
 function verificarToken(req, res, next) {
