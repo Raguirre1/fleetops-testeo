@@ -11,14 +11,14 @@ const SECRET_KEY = process.env.JWT_SECRET || "mi_clave_secreta";
 
 // ==== CORS CONFIGURADO PARA DESARROLLO ====
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "fleetops-production.up.railway.app"); // 🔁 puedes reemplazar "*" por el dominio exacto si quieres limitarlo
+  res.header("Access-Control-Allow-Origin", "https://orange-tribble-g4q5jwgr4qggc9j6r-5173.app.github.dev"); // ⚠️ Usa el dominio exacto de tu frontend
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  
   if (req.method === "OPTIONS") {
-    return res.sendStatus(200); // Responde a las preflight requests
+    return res.sendStatus(200);
   }
-
+  
   next();
 });
 
