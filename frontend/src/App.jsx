@@ -17,7 +17,7 @@ function App() {
     setUsuario(null);
   }, []);
 
-  if (!usuario) return <Login setUsuarioActivo={setUsuario} />;
+  if (!usuario) return <Login onLoginSuccess={setUsuario} />;
 
   return (
     <div className="bg-gray-100 min-h-screen">
