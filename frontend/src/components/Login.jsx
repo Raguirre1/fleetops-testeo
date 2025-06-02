@@ -1,70 +1,62 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import axios from "axios";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://fleetops-production.up.railway.app";
 
-function Login({ setUsuarioActivo }) {
+const Login = ({ onLoginSuccess }) => {
   const [nombre, setNombre] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleLogin = async () => {
-    if (!nombre || !password) {
-      setError("Por favor introduce tu nombre y contraseña.");
-      return;
-    }
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
 
     try {
-      const response = await axios.post(`${BACKEND_URL}/login`, {
-        nombre,
-        password,
-      });
-
+      const response = await axios.post(`${BACKEND_URL}/login`, { nombre, password });
       const { token, usuario } = response.data;
 
-      // Guardar token y datos de usuario por separado
+      // Guardar en localStorage
       localStorage.setItem("token", token);
-      localStorage.setItem("usuario", JSON.stringify(usuario));
-      setUsuarioActivo(usuario);
+      localStorage.setItem("nombre", usuario.nombre);
+      localStorage.setItem("rol", usuario.rol);
+
+      // Redirigir o activar sesión
+      onLoginSuccess(usuario);
 
     } catch (err) {
+      setError("Credenciales incorrectas");
       console.error("Error al iniciar sesión:", err);
-      setError("Usuario o contraseña incorrectos.");
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded shadow-md w-96 space-y-4">
-        <h2 className="text-2xl font-bold text-gray-800">Iniciar sesión</h2>
+    <div className="flex items-center justify-center h-screen bg-gray-100">
+      <form onSubmit={handleLogin} className="bg-white p-8 rounded shadow-md w-80">
+        <h2 className="text-2xl font-bold mb-4 text-center">Iniciar sesión</h2>
 
         <input
           type="text"
-          placeholder="Nombre de usuario"
+          placeholder="Usuario"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          className="w-full border border-gray-300 px-3 py-2 rounded"
+          className="w-full p-2 mb-4 border rounded"
         />
-
         <input
           type="password"
           placeholder="Contraseña"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full border border-gray-300 px-3 py-2 rounded"
+          className="w-full p-2 mb-4 border rounded"
         />
+        {error && <p className="text-red-500 mb-2">{error}</p>}
 
-        {error && <div className="text-red-600">{error}</div>}
-
-        <button
-          onClick={handleLogin}
-          className="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded hover:bg-blue-700"
-        >
+        <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
           Entrar
         </button>
-      </div>
+      </form>
     </div>
   );
-}
+};
 
 export default Login;
