@@ -9,21 +9,15 @@ const app = express();
 const PORT = process.env.PORT;
 const SECRET_KEY = process.env.JWT_SECRET || "mi_clave_secreta";
 
-// ==== CORS CONFIGURADO PARA DESARROLLO ====
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://orange-tribble-g4q5jwgr4qggc9j6r-5173.app.github.dev"); // ⚠️ Usa el dominio exacto de tu frontend
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  
-  next();
-});
-
+// ==== CORS CONFIGURADO FLEXIBLE PARA Railway y Codespaces ====
+app.use(cors({
+  origin: "*", // ⚠️ Para desarrollo. Puedes restringir en producción si quieres
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
 app.use(express.json());
+
 
 // ======== MIDDLEWARE JWT =========
 function verificarToken(req, res, next) {
