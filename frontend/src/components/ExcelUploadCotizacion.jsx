@@ -94,7 +94,7 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
 
   return (
     <div className="p-4 border rounded mt-8">
-      <h3 className="text-lg font-semibold mb-4">Subir Pedido en Excel </h3>
+      <h3 className="text-lg font-semibold mb-4">Linea de Pedidos </h3>
 
       <input
         type="file"

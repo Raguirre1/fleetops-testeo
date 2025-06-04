@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { FiSave, FiTrash2 } from "react-icons/fi";
+import { FiSave } from "react-icons/fi";
+import { FaCog } from "react-icons/fa";
 import PurchaseDetail from "./PurchaseDetail";
+import { supabase } from "../supabaseClient";
 
 const PurchaseRequest = ({ usuario, onBack }) => {
   const barcos = ["Dacil", "Herbania", "Hesperides", "Tinerfe"];
   const [buqueSeleccionado, setBuqueSeleccionado] = useState("");
+  const [solicitudes, setSolicitudes] = useState([]);
   const [formulario, setFormulario] = useState({
     numeroPedido: "",
     tituloPedido: "",
@@ -12,116 +15,128 @@ const PurchaseRequest = ({ usuario, onBack }) => {
     fechaPedido: "",
     fechaEntrega: "",
     numeroCuenta: "",
-    archivoAdjunto: null,
   });
 
-  const [solicitudesPorBuque, setSolicitudesPorBuque] = useState(() => {
-    const saved = localStorage.getItem("solicitudes");
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  const [editarIndex, setEditarIndex] = useState(null);
+  const [editarId, setEditarId] = useState(null);
   const [detallePedido, setDetallePedido] = useState(null);
+  const [estadoMenuVisible, setEstadoMenuVisible] = useState(null);
+
+  const cargarSolicitudes = async () => {
+    if (!buqueSeleccionado) return;
+    const { data, error } = await supabase
+      .from("solicitudes_compra")
+      .select("*")
+      .eq("buque", buqueSeleccionado)
+      .order("created_at", { ascending: false });
+
+    if (!error) setSolicitudes(data);
+  };
 
   useEffect(() => {
-    localStorage.setItem("solicitudes", JSON.stringify(solicitudesPorBuque));
-  }, [solicitudesPorBuque]);
+    cargarSolicitudes();
+  }, [buqueSeleccionado]);
 
   const handleChange = (e) => {
-    const { name, value, type, files } = e.target;
-    setFormulario((prev) => ({
-      ...prev,
-      [name]: type === "file" ? files[0] : value,
-    }));
+    const { name, value } = e.target;
+    setFormulario((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleGuardar = () => {
-    localStorage.setItem("solicitudes", JSON.stringify(solicitudesPorBuque));
-    alert("Solicitudes guardadas correctamente.");
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
     const nueva = {
-      ...formulario,
-      numeroPedido: String(formulario.numeroPedido), // 🟢 FORZAMOS A STRING
+      numero_pedido: formulario.numeroPedido,
+      titulo_pedido: formulario.tituloPedido,
+      urgencia: formulario.urgencia,
+      fecha_pedido: formulario.fechaPedido || null,
+      fecha_entrega: formulario.fechaEntrega || null,
+      numero_cuenta: formulario.numeroCuenta,
       buque: buqueSeleccionado,
       usuario: usuario.nombre,
-      fecha: formulario.fechaPedido || new Date().toLocaleDateString(),
-      estado: "Solicitud de compra",
     };
 
+    const { error } = await supabase
+      .from("solicitudes_compra")
+      .upsert(nueva, { onConflict: "numero_pedido" });
 
-    const actual = solicitudesPorBuque[buqueSeleccionado] || [];
-    const actualizadas =
-      editarIndex !== null
-        ? actual.map((s, i) => (i === editarIndex ? nueva : s))
-        : [nueva, ...actual];
+    if (!error) {
+      setFormulario({
+        numeroPedido: "",
+        tituloPedido: "",
+        urgencia: "",
+        fechaPedido: "",
+        fechaEntrega: "",
+        numeroCuenta: "",
+      });
+      setEditarId(null);
+      await cargarSolicitudes();
+    } else {
+      alert("Error al guardar: " + error.message);
+    }
+  };
 
-    setSolicitudesPorBuque({
-      ...solicitudesPorBuque,
-      [buqueSeleccionado]: actualizadas,
-    });
-
+  const handleEditar = (solicitud) => {
     setFormulario({
-      numeroPedido: "",
-      tituloPedido: "",
-      urgencia: "",
-      fechaPedido: "",
-      fechaEntrega: "",
-      numeroCuenta: "",
-      archivoAdjunto: null,
+      numeroPedido: solicitud.numero_pedido,
+      tituloPedido: solicitud.titulo_pedido,
+      urgencia: solicitud.urgencia,
+      fechaPedido: solicitud.fecha_pedido?.split("T")[0] || "",
+      fechaEntrega: solicitud.fecha_entrega?.split("T")[0] || "",
+      numeroCuenta: solicitud.numero_cuenta,
     });
-    setEditarIndex(null);
+    setEditarId(solicitud.numero_pedido);
   };
 
-  const cambiarEstado = (index, nuevoEstado) => {
-    const actualizadas = [...solicitudesPorBuque[buqueSeleccionado]];
-    actualizadas[index].estado = nuevoEstado;
-    setSolicitudesPorBuque({
-      ...solicitudesPorBuque,
-      [buqueSeleccionado]: actualizadas,
-    });
-  };
-
-  const handleEditar = (index) => {
-    const solicitud = solicitudesPorBuque[buqueSeleccionado][index];
-
-    const fechaPedidoISO = solicitud.fechaPedido
-      ? new Date(solicitud.fechaPedido).toISOString().split("T")[0]
-      : "";
-
-    const fechaEntregaISO = solicitud.fechaEntrega
-      ? new Date(solicitud.fechaEntrega).toISOString().split("T")[0]
-      : "";
-
-    setFormulario({
-      ...solicitud,
-      fechaPedido: fechaPedidoISO,
-      fechaEntrega: fechaEntregaISO,
-    });
-    setEditarIndex(index);
-  };
-
-  const handleEliminar = (index) => {
-    const confirm = window.confirm("¿Estás seguro de que deseas eliminar esta solicitud?");
-    if (!confirm) return;
-
-    const actual = solicitudesPorBuque[buqueSeleccionado] || [];
-    const actualizadas = actual.filter((_, i) => i !== index);
-    setSolicitudesPorBuque({
-      ...solicitudesPorBuque,
-      [buqueSeleccionado]: actualizadas,
-    });
+  const handleEliminar = async (numeroPedido) => {
+    if (!window.confirm("¿Eliminar esta solicitud?")) return;
+    const { error } = await supabase
+      .from("solicitudes_compra")
+      .delete()
+      .eq("numero_pedido", numeroPedido);
+    if (!error) await cargarSolicitudes();
   };
 
   const handleVerDetalle = (solicitud) => {
-    setDetallePedido(solicitud);
+    setDetallePedido({
+      numeroPedido: solicitud.numero_pedido,
+      tituloPedido: solicitud.titulo_pedido,
+      urgencia: solicitud.urgencia,
+      fechaPedido: solicitud.fecha_pedido?.split("T")[0] || "—",
+      fechaEntrega: solicitud.fecha_entrega?.split("T")[0] || "—",
+      numeroCuenta: solicitud.numero_cuenta || "—",
+      buque: solicitud.buque || "—",
+      usuario: solicitud.usuario || "—",
+      estado: solicitud.estado || "—",
+    });
+  };
+
+
+  const actualizarEstado = async (numeroPedido, nuevoEstado) => {
+    const fechaHoy = new Date().toISOString();
+    const { error } = await supabase
+      .from("solicitudes_compra")
+      .update({ estado: nuevoEstado, fecha_estado: fechaHoy })
+      .eq("numero_pedido", numeroPedido);
+    if (!error) {
+      setSolicitudes((prev) =>
+        prev.map((s) =>
+          s.numero_pedido === numeroPedido
+            ? { ...s, estado: nuevoEstado, fecha_estado: fechaHoy }
+            : s
+        )
+      );
+    }
   };
 
   if (detallePedido) {
-    return <PurchaseDetail pedido={detallePedido} volver={() => setDetallePedido(null)} />;
+    return (
+      <PurchaseDetail
+        pedido={detallePedido}
+        volver={async () => {
+          setDetallePedido(null);
+          await cargarSolicitudes();
+        }}
+      />
+    );
   }
 
   if (!buqueSeleccionado) {
@@ -135,15 +150,10 @@ const PurchaseRequest = ({ usuario, onBack }) => {
         >
           <option value="">-- Seleccionar --</option>
           {barcos.map((buque) => (
-            <option key={buque} value={buque}>
-              {buque}
-            </option>
+            <option key={buque} value={buque}>{buque}</option>
           ))}
         </select>
-        <button
-          onClick={onBack}
-          className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500"
-        >
+        <button onClick={onBack} className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500">
           Volver atrás
         </button>
       </div>
@@ -152,109 +162,77 @@ const PurchaseRequest = ({ usuario, onBack }) => {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Solicitud de Compra - {buqueSeleccionado}</h2>
-        <button
-          onClick={() => {
-            const confirm = window.confirm("¿Deseas guardar antes de cambiar de buque?");
-            if (confirm) handleGuardar();
-            setBuqueSeleccionado("");
-          }}
-          className="text-sm text-blue-600 underline"
-        >
-          Cambiar buque
+      <h2 className="text-xl font-bold mb-4">Solicitud de Compra - {buqueSeleccionado}</h2>
+      <form onSubmit={handleSubmit} className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input name="numeroPedido" value={formulario.numeroPedido} onChange={handleChange} required placeholder="Nº Pedido" className="border p-2 rounded" />
+        <input name="tituloPedido" value={formulario.tituloPedido} onChange={handleChange} required placeholder="Título" className="border p-2 rounded" />
+        <input name="urgencia" value={formulario.urgencia} onChange={handleChange} placeholder="Urgencia" className="border p-2 rounded" />
+        <input type="date" name="fechaPedido" value={formulario.fechaPedido} onChange={handleChange} className="border p-2 rounded" />
+        <input type="date" name="fechaEntrega" value={formulario.fechaEntrega} onChange={handleChange} className="border p-2 rounded" />
+        <input name="numeroCuenta" value={formulario.numeroCuenta} onChange={handleChange} placeholder="Cuenta contable" className="border p-2 rounded" />
+        <button type="submit" className="col-span-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 flex items-center justify-center gap-2">
+          <FiSave /> Guardar
         </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="mb-6">
-        <table className="w-full border border-gray-300 text-sm bg-white rounded-md">
-          <thead className="bg-gray-100 text-left">
-            <tr>
-              <th className="p-2">Nº Pedido</th>
-              <th className="p-2">Título</th>
-              <th className="p-2">Urgencia</th>
-              <th className="p-2">Fecha Pedido</th>
-              <th className="p-2">Fecha Límite</th>
-              <th className="p-2">Cuenta Contable</th>
-              <th className="p-2">Archivo</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="p-2">
-                <input type="text" name="numeroPedido" value={formulario.numeroPedido} onChange={handleChange} required className="border p-2 w-full rounded" />
-              </td>
-              <td className="p-2">
-                <input type="text" name="tituloPedido" value={formulario.tituloPedido} onChange={handleChange} required className="border p-2 w-full rounded" />
-              </td>
-              <td className="p-2">
-                <select name="urgencia" value={formulario.urgencia} onChange={handleChange} required className="border p-2 w-full rounded">
-                  <option value="">Seleccionar</option>
-                  <option value="Normal">Normal</option>
-                  <option value="Medio">Urgente</option>
-                  <option value="Alto">Muy Urgente</option>
-                </select>
-              </td>
-              <td className="p-2">
-                <input type="date" name="fechaPedido" value={formulario.fechaPedido} onChange={handleChange} required className="border p-2 w-full rounded" />
-              </td>
-              <td className="p-2">
-                <input type="date" name="fechaEntrega" value={formulario.fechaEntrega} onChange={handleChange} className="border p-2 w-full rounded" />
-              </td>
-              <td className="p-2">
-                <input type="text" name="numeroCuenta" value={formulario.numeroCuenta} onChange={handleChange} className="border p-2 w-full rounded" />
-              </td>
-              <td className="p-2">
-                <input type="file" name="archivoAdjunto" onChange={handleChange} className="border p-1 w-full rounded bg-white" />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div className="mt-4 text-right flex justify-end items-center gap-4">
-          <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
-            {editarIndex !== null ? "Actualizar" : "Enviar Solicitud"}
-          </button>
-          <button type="button" onClick={handleGuardar} title="Guardar solicitudes">
-            <FiSave className="text-xl text-green-600 hover:text-green-800" />
-          </button>
-        </div>
       </form>
 
-      <div className="mt-10">
-        <h3 className="font-semibold text-lg mb-4">📋 Solicitudes registradas</h3>
-        <table className="min-w-full border border-gray-400 text-sm bg-white">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="border px-3 py-2">Nº Pedido</th>
-              <th className="border px-3 py-2">Título</th>
-              <th className="border px-3 py-2">Urgencia</th>
-              <th className="border px-3 py-2">Fecha</th>
-              <th className="border px-3 py-2">Solicitante</th>
-              <th className="border px-3 py-2">Estado</th>
-              <th className="border px-3 py-2">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(solicitudesPorBuque[buqueSeleccionado] || []).map((s, idx) => (
-              <tr key={idx} className="text-center hover:bg-gray-50">
-                <td className="border px-3 py-2 font-semibold">{s.numeroPedido}</td>
-                <td className="border px-3 py-2">{s.tituloPedido}</td>
-                <td className="border px-3 py-2">{s.urgencia}</td>
-                <td className="border px-3 py-2">{s.fecha}</td>
-                <td className="border px-3 py-2">{s.usuario}</td>
-                <td className="border px-3 py-2">{s.estado}</td>
-                <td className="border px-3 py-2 space-x-2 flex justify-center items-center gap-2">
-                  <button onClick={() => handleEditar(idx)} className="text-blue-600 underline text-sm">Editar</button>
-                  <button onClick={() => handleVerDetalle(s)} className="text-green-600 underline text-sm">Ver</button>
-                  <button onClick={() => handleEliminar(idx)} title="Eliminar">
-                    <FiTrash2 className="text-red-600 hover:text-red-800 text-lg" />
+      <h3 className="font-semibold text-lg mb-4">📋 Solicitudes registradas</h3>
+      <table className="min-w-full border border-gray-400 text-sm bg-white">
+        <thead className="bg-gray-100">
+          <tr>
+            <th className="border px-3 py-2">Nº Pedido</th>
+            <th className="border px-3 py-2">Título</th>
+            <th className="border px-3 py-2">Urgencia</th>
+            <th className="border px-3 py-2">Fecha</th>
+            <th className="border px-3 py-2">Fecha Límite</th>
+            <th className="border px-3 py-2">Solicitante</th>
+            <th className="border px-3 py-2">Estado</th>
+            <th className="border px-3 py-2">Fecha estado</th>
+            <th className="border px-3 py-2">Cuenta Contable</th>
+            <th className="border px-3 py-2">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {solicitudes.map((s, idx) => (
+            <tr key={idx} className="text-center hover:bg-gray-50">
+              <td className="border px-3 py-2 font-semibold">{s.numero_pedido}</td>
+              <td className="border px-3 py-2">{s.titulo_pedido}</td>
+              <td className="border px-3 py-2">{s.urgencia}</td>
+              <td className="border px-3 py-2">{s.fecha_pedido?.split("T")[0]}</td>
+              <td className="border px-3 py-2">{s.fecha_entrega?.split("T")[0] || "-"}</td>
+              <td className="border px-3 py-2">{s.usuario}</td>
+              <td className="border px-3 py-2">{s.estado === "Pedido Activo" ? "Pedido Activo ✅" : s.estado || "Solicitud de Compra"}</td>
+              <td className="border px-3 py-2">{s.fecha_estado?.split("T")[0] || "-"}</td>
+              <td className="border px-3 py-2">{s.numero_cuenta || "-"}</td>
+              <td className="border px-3 py-2 relative">
+                <div className="flex gap-2 justify-center items-center">
+                  <button onClick={() => handleEditar(s)} title="Editar">📝</button>
+                  <button onClick={() => handleVerDetalle(s)} title="Ver">👁️</button>
+                  <button onClick={() => handleEliminar(s.numero_pedido)} title="Eliminar">🗑️</button>
+                  <button onClick={() => setEstadoMenuVisible(estadoMenuVisible === s.numero_pedido ? null : s.numero_pedido)} title="Cambiar estado">
+                    <FaCog />
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </div>
+                {estadoMenuVisible === s.numero_pedido && (
+                  <div className="absolute bg-white border shadow-md p-2 mt-2 z-10 text-left">
+                    {["Solicitud de Compra", "En Consulta", "Pedido Activo", "Recibido"].map((estado) => (
+                      <div
+                        key={estado}
+                        onClick={() => {
+                          actualizarEstado(s.numero_pedido, estado);
+                          setEstadoMenuVisible(null);
+                        }}
+                        className="cursor-pointer hover:bg-gray-200 px-2 py-1"
+                      >
+                        {estado}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };

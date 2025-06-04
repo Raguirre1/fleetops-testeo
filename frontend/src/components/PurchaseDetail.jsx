@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import PropTypes from "prop-types";
 import ExcelUploadCotizacion from "./ExcelUploadCotizacion";
 import CotizacionProveedor from "./CotizacionProveedor";
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://fleetops-production.up.railway.app";
+import { supabase } from "../supabaseClient";
 
 const PurchaseDetail = ({ pedido, volver }) => {
   const [comentarios, setComentarios] = useState("");
-  const [infoAdicional, setInfoAdicional] = useState("");
+  const [infoadicional, setInfoadicional] = useState("");
   const [archivos, setArchivos] = useState([]);
   const [archivosSubidos, setArchivosSubidos] = useState([]);
   const [error, setError] = useState("");
@@ -16,21 +14,39 @@ const PurchaseDetail = ({ pedido, volver }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
-  const pedidoKey = `detalle-${pedido.numeroPedido}`;
-
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const savedData = localStorage.getItem(pedidoKey);
-        if (savedData) {
-          const { comentarios: savedComentarios, infoAdicional: savedInfo } = JSON.parse(savedData);
-          setComentarios(savedComentarios || "");
-          setInfoAdicional(savedInfo || "");
+        const { data, error } = await supabase
+          .from("purchase_details")
+          .select("comentarios, infoadicional")
+          .eq("numeropedido", pedido.numeroPedido)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data) {
+          setComentarios(data.comentarios || "");
+          setInfoadicional(data.infoadicional || "");
         }
 
-        const { data } = await axios.get(`${BACKEND_URL}/uploads/${pedido.numeroPedido}`);
-        setArchivosSubidos(data.archivos || []);
+        const { data: files, error: fileError } = await supabase.storage
+          .from("cotizaciones")
+          .list(`${pedido.numeroPedido}/documentos/`);
+
+        if (fileError) throw fileError;
+
+        const archivosConUrl = await Promise.all(
+          files.map(async (file) => {
+            const { data: urlData } = supabase.storage
+              .from("cotizaciones")
+              .getPublicUrl(`${pedido.numeroPedido}/documentos/${file.name}`);
+            return { nombre: file.name, url: urlData.publicUrl };
+          })
+        );
+
+        setArchivosSubidos(archivosConUrl);
       } catch (err) {
         setError("Error al cargar los datos. Revisa la consola para más detalles.");
         console.error("Error en loadData:", err);
@@ -41,6 +57,29 @@ const PurchaseDetail = ({ pedido, volver }) => {
 
     loadData();
   }, [pedido.numeroPedido]);
+
+  const handleSaveToSupabase = async () => {
+    try {
+      const { error } = await supabase
+        .from("purchase_details")
+        .upsert(
+          {
+            numeropedido: pedido.numeroPedido,
+            comentarios,
+            infoadicional,
+          },
+          { onConflict: "numeropedido" }
+        );
+
+      if (error) throw error;
+
+      setSuccessMessage("✅ Datos guardados en Supabase");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err) {
+      console.error("Error en saveToSupabase:", err);
+      setError("❌ Error al guardar en Supabase");
+    }
+  };
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
@@ -58,7 +97,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
     const MAX_SIZE = 10 * 1024 * 1024;
     const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf", "eml", "msg"];
 
-    const validFiles = files.filter(file => {
+    const validFiles = files.filter((file) => {
       const ext = file.name.split(".").pop().toLowerCase();
       if (!ALLOWED_EXTENSIONS.includes(ext)) {
         setError(`Tipo de archivo no permitido: ${file.name}`);
@@ -80,16 +119,34 @@ const PurchaseDetail = ({ pedido, volver }) => {
   const uploadFiles = async () => {
     if (archivos.length === 0) return;
 
-    const formData = new FormData();
-    archivos.forEach(file => formData.append("archivos", file));
-
     try {
       setIsLoading(true);
-      const res = await axios.post(`${BACKEND_URL}/upload/${pedido.numeroPedido}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
 
-      setArchivosSubidos(res.data.archivos || []);
+      for (const archivo of archivos) {
+        const { error } = await supabase.storage
+          .from("cotizaciones")
+          .upload(`${pedido.numeroPedido}/documentos/${archivo.name}`, archivo, {
+            cacheControl: "3600",
+            upsert: true,
+          });
+
+        if (error) throw error;
+      }
+
+      const { data: files } = await supabase.storage
+        .from("cotizaciones")
+        .list(`${pedido.numeroPedido}/documentos/`);
+
+      const archivosConUrl = await Promise.all(
+        files.map(async (file) => {
+          const { data: urlData } = supabase.storage
+            .from("cotizaciones")
+            .getPublicUrl(`${pedido.numeroPedido}/documentos/${file.name}`);
+          return { nombre: file.name, url: urlData.publicUrl };
+        })
+      );
+
+      setArchivosSubidos(archivosConUrl);
       setArchivos([]);
       setSuccessMessage("¡Archivos subidos correctamente!");
       setTimeout(() => setSuccessMessage(""), 3000);
@@ -103,8 +160,13 @@ const PurchaseDetail = ({ pedido, volver }) => {
 
   const handleDeleteFile = async (fileName) => {
     try {
-      await axios.delete(`${BACKEND_URL}/uploads/${pedido.numeroPedido}/${fileName}`);
-      setArchivosSubidos(prev => prev.filter(file => file.nombre !== fileName));
+      const { error } = await supabase.storage
+        .from("cotizaciones")
+        .remove([`${pedido.numeroPedido}/documentos/${fileName}`]);
+
+      if (error) throw error;
+
+      setArchivosSubidos((prev) => prev.filter((file) => file.nombre !== fileName));
       setSuccessMessage(`Archivo ${fileName} eliminado.`);
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err) {
@@ -113,44 +175,19 @@ const PurchaseDetail = ({ pedido, volver }) => {
     }
   };
 
-  const saveLocalData = () => {
-    try {
-      localStorage.setItem(pedidoKey, JSON.stringify({ comentarios, infoAdicional }));
-      setSuccessMessage("¡Datos guardados localmente!");
-      setTimeout(() => setSuccessMessage(""), 3000);
-    } catch (err) {
-      setError("Error al guardar en localStorage. ¿Modo incógnito?");
-      console.error("Error en saveLocalData:", err);
-    }
-  };
-
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Detalle del Pedido</h2>
-      <p className="text-lg font-medium mb-6 text-gray-700">Nº de Pedido: {pedido.numeroPedido}</p>
-
-      <div className="mb-6 space-y-1 text-gray-700">
-        {pedido.tituloPedido && <p><strong>Título:</strong> {pedido.tituloPedido}</p>}
-        {pedido.buque && <p><strong>Buque:</strong> {pedido.buque}</p>}
-        {pedido.usuario && <p><strong>Solicitante:</strong> {pedido.usuario}</p>}
-        {pedido.urgencia && <p><strong>Urgencia:</strong> {pedido.urgencia}</p>}
-        {pedido.fechaPedido && <p><strong>Fecha de pedido:</strong> {pedido.fechaPedido}</p>}
-        {pedido.fechaEntrega && <p><strong>Fecha de entrega:</strong> {pedido.fechaEntrega}</p>}
-        {pedido.numeroCuenta && <p><strong>Cuenta contable:</strong> {pedido.numeroCuenta}</p>}
-        {pedido.estado && <p><strong>Estado:</strong> {pedido.estado}</p>}
-        {pedido.archivoAdjunto instanceof File && (
-          <p>
-            <strong>Archivo adjunto:</strong>{" "}
-            <a
-              href={URL.createObjectURL(pedido.archivoAdjunto)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 underline"
-            >
-              {pedido.archivoAdjunto.name}
-            </a>
-          </p>
-        )}
+      <div className="mb-6 p-4 bg-gray-100 border rounded text-gray-800 space-y-1">
+        <h2 className="text-xl font-bold text-blue-800 mb-2">📦 Detalle del Pedido</h2>
+        <p><strong>Nº Pedido:</strong> {pedido.numeroPedido}</p>
+        <p><strong>Título:</strong> {pedido.tituloPedido || "—"}</p>
+        <p><strong>Buque:</strong> {pedido.buque || "—"}</p>
+        <p><strong>Solicitante:</strong> {pedido.usuario || "—"}</p>
+        <p><strong>Urgencia:</strong> {pedido.urgencia || "—"}</p>
+        <p><strong>Fecha de pedido:</strong> {pedido.fechaPedido || "—"}</p>
+        <p><strong>Fecha de entrega:</strong> {pedido.fechaEntrega || "—"}</p>
+        <p><strong>Cuenta contable:</strong> {pedido.numeroCuenta || "—"}</p>
+        <p><strong>Estado:</strong> {pedido.estado || "—"}</p>
       </div>
 
       {error && <div className="bg-red-100 text-red-800 p-3 mb-4 rounded">{error}</div>}
@@ -170,8 +207,8 @@ const PurchaseDetail = ({ pedido, volver }) => {
         <div>
           <label className="block mb-2 font-medium">Información adicional</label>
           <textarea
-            value={infoAdicional}
-            onChange={(e) => setInfoAdicional(e.target.value)}
+            value={infoadicional}
+            onChange={(e) => setInfoadicional(e.target.value)}
             className="w-full p-3 border rounded"
             rows={4}
           />
@@ -179,7 +216,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
       </div>
 
       <button
-        onClick={saveLocalData}
+        onClick={handleSaveToSupabase}
         disabled={isLoading}
         className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
       >
@@ -298,7 +335,6 @@ PurchaseDetail.propTypes = {
     fechaEntrega: PropTypes.string,
     numeroCuenta: PropTypes.string,
     estado: PropTypes.string,
-    archivoAdjunto: PropTypes.any,
   }).isRequired,
   volver: PropTypes.func.isRequired,
 };
