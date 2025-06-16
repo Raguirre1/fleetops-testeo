@@ -13,12 +13,16 @@ import {
   extendTheme,
 } from "@chakra-ui/react";
 import { useState, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
+
 import Login from "./components/Login";
 import PurchaseRequest from "./components/PurchaseRequest";
 import AsistenciaRequest from "./components/AsistenciaRequest";
 import Controlling from "./components/Controlling";
 import SeleccionFlota from "./components/SeleccionFlota";
-import { FlotaProvider, useFlota } from "./components/FlotaContext"; // 🔹 Importamos el contexto
+import ResetPassword from "./components/ResetPassword";
+import DashboardGeneral from "./components/DashboardGeneral";
+import { FlotaProvider, useFlota } from "./components/FlotaContext";
 
 const theme = extendTheme({
   styles: {
@@ -31,17 +35,18 @@ const theme = extendTheme({
   },
 });
 
-function AppContent() {
-  const [usuario, setUsuario] = useState(null);
-  const { flotaSeleccionada, setFlotaSeleccionada } = useFlota(); // 🔹 Usamos contexto
+function MainApp({ usuario, setUsuario }) {
+  const { flotaSeleccionada, setFlotaSeleccionada } = useFlota();
+  const navigate = useNavigate();
+  const [mostrarDashboard, setMostrarDashboard] = useState(true);
 
   const cerrarSesion = () => {
     localStorage.removeItem("usuario");
     setUsuario(null);
-    setFlotaSeleccionada(null); // 🔹 Limpiamos también la flota global
+    setFlotaSeleccionada(null);
+    navigate("/");
   };
 
-  // NUEVO: Función para cambiar flota con confirmación
   const cambiarFlota = () => {
     const confirmar = window.confirm(
       "¿Seguro que quieres volver a Seleccionar la Flota?\nAsegúrate de guardar los cambios antes de continuar."
@@ -51,12 +56,11 @@ function AppContent() {
     }
   };
 
-  useEffect(() => {
-    setUsuario(null);
-  }, []);
+  if (!flotaSeleccionada)
+    return <SeleccionFlota onFlotaSeleccionada={setFlotaSeleccionada} />;
 
-  if (!usuario) return <Login onLoginSuccess={setUsuario} />;
-  if (!flotaSeleccionada) return <SeleccionFlota onFlotaSeleccionada={setFlotaSeleccionada} />;
+  if (mostrarDashboard)
+    return <DashboardGeneral onIrAModulos={() => setMostrarDashboard(false)} />;
 
   return (
     <Box minH="100vh" bg="gray.50">
@@ -71,10 +75,12 @@ function AppContent() {
         shadow="sm"
       >
         <Text fontSize="lg" fontWeight="bold">
-          {usuario.nombre} | Flota: {flotaSeleccionada.nombre}
+          {usuario?.nombre || usuario?.email} | Flota: {flotaSeleccionada.nombre}
         </Text>
-
         <Flex gap={2}>
+          <Button colorScheme="teal" onClick={() => setMostrarDashboard(true)}>
+            🏠 Ir al Dashboard
+          </Button>
           <Button colorScheme="yellow" onClick={cambiarFlota}>
             Seleccionar Flota
           </Button>
@@ -91,7 +97,6 @@ function AppContent() {
           <Tab>📊 Controlling</Tab>
           <Tab>📁 SGC</Tab>
         </TabList>
-
         <TabPanels mt={4}>
           <TabPanel>
             <PurchaseRequest usuario={usuario} />
@@ -112,10 +117,30 @@ function AppContent() {
 }
 
 function App() {
+  const [usuario, setUsuario] = useState(null);
+
+  useEffect(() => {
+    setUsuario(null);
+  }, []);
+
   return (
     <ChakraProvider theme={theme}>
-      <FlotaProvider> {/* 🔹 Envolvemos toda la app */}
-        <AppContent />
+      <FlotaProvider>
+        <Router>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                usuario ? (
+                  <MainApp usuario={usuario} setUsuario={setUsuario} />
+                ) : (
+                  <Login onLoginSuccess={setUsuario} />
+                )
+              }
+            />
+            <Route path="/reset-password" element={<ResetPassword />} />
+          </Routes>
+        </Router>
       </FlotaProvider>
     </ChakraProvider>
   );

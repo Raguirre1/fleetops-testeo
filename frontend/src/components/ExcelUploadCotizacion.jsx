@@ -1,6 +1,4 @@
-import React, { useState, useEffect } from "react";
-import * as XLSX from "xlsx";
-import PropTypes from "prop-types";
+import React from "react";
 import {
   Box,
   Button,
@@ -15,13 +13,19 @@ import {
   HStack,
   FormLabel,
   useToast,
+  IconButton,
 } from "@chakra-ui/react";
+import { CloseIcon } from "@chakra-ui/icons";
+import { useEffect, useState } from "react";
+import PropTypes from "prop-types";
+import * as XLSX from "xlsx";
 import { supabase } from "../supabaseClient";
 
 const ExcelUploadCotizacion = ({ numeroPedido }) => {
   const [items, setItems] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [nombreArchivo, setNombreArchivo] = useState("");
+  const [proveedores, setProveedores] = useState([]);
   const toast = useToast();
 
   useEffect(() => {
@@ -35,10 +39,9 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
         toast({ title: "Error cargando datos", status: "error" });
         console.error(error);
       } else {
-        setItems(data);
+        setItems(data || []);
       }
     };
-
     fetchItems();
   }, [numeroPedido]);
 
@@ -58,6 +61,7 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
         referencia: row["Ref. Fabricante"] || row["Referencia"] || "",
         cantidad: row["Cantidad"] || 1,
         unidad: row["Unidad"] || "Unit",
+        precios: {},
       }));
 
       if (formattedItems.length === 0) {
@@ -138,6 +142,34 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
     setItems(updated);
   };
 
+  const handleProveedorChange = (index, proveedor, value) => {
+    const updated = [...items];
+    if (!updated[index].precios) updated[index].precios = {};
+    updated[index].precios[proveedor] = parseFloat(value) || 0;
+    setItems(updated);
+  };
+
+  const handleAddProveedor = () => {
+    const nuevoProveedor = `Proveedor ${proveedores.length + 1}`;
+    setProveedores([...proveedores, nuevoProveedor]);
+  };
+
+  const handleRemoveProveedor = (nombreProveedor) => {
+    const nuevosProveedores = proveedores.filter((p) => p !== nombreProveedor);
+    setProveedores(nuevosProveedores);
+
+    const actualizados = items.map((item) => {
+      if (item.precios?.[nombreProveedor]) {
+        const nuevaPrecio = { ...item.precios };
+        delete nuevaPrecio[nombreProveedor];
+        return { ...item, precios: nuevaPrecio };
+      }
+      return item;
+    });
+
+    setItems(actualizados);
+  };
+
   const handleSave = async () => {
     try {
       const { error } = await supabase.from("lineas_cotizacion").upsert(items, {
@@ -162,6 +194,7 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
         referencia: "",
         cantidad: 1,
         unidad: "Unit",
+        precios: {},
       },
     ]);
   };
@@ -172,7 +205,7 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
   };
 
   return (
-    <Box mt={8} p={4} borderWidth={1} borderRadius="lg">
+    <Box p={6} maxW="100%">
       <Text fontSize="xl" fontWeight="bold" mb={4}>Línea de Pedidos</Text>
 
       <Box
@@ -181,12 +214,7 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
         p={6}
         borderRadius="md"
         textAlign="center"
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
+        mb={4}
       >
         <Text fontWeight="medium">Arrastra el archivo Excel aquí</Text>
         <Input
@@ -206,66 +234,94 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
         )}
       </Box>
 
-      <HStack spacing={3} mt={4} mb={2}>
+      <HStack spacing={3} mb={4} flexWrap="wrap">
         <Button onClick={handleExportToExcel} colorScheme="green">📤 Exportar Excel</Button>
         <Button onClick={handleDeleteAll} colorScheme="red">🗑️ Eliminar Todo</Button>
+        {proveedores.length < 3 && (
+          <Button onClick={handleAddProveedor} colorScheme="purple">➕ Añadir Proveedor</Button>
+        )}
       </HStack>
 
-      <Table variant="simple" size="sm">
-        <Thead bg="gray.100">
-          <Tr>
-            <Th>#</Th>
-            <Th>Descripción</Th>
-            <Th>Referencia</Th>
-            <Th>Cantidad</Th>
-            <Th>Unidad</Th>
-            <Th>Acciones</Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {items.length === 0 ? (
+      <Box w="100%">
+        <Table variant="simple" size="sm" w="100%">
+          <Thead bg="gray.100">
             <Tr>
-              <Td colSpan={6} textAlign="center" py={4}>No hay ítems cargados.</Td>
+              <Th>#</Th>
+              <Th>Descripción</Th>
+              <Th>Referencia</Th>
+              <Th>Cantidad</Th>
+              <Th>Unidad</Th>
+              {proveedores.map((prov) => (
+                <React.Fragment key={prov}>
+                  <Th>
+                    <HStack justify="space-between">
+                      <Text fontSize="sm">{prov} €/u</Text>
+                      <IconButton
+                        size="xs"
+                        icon={<CloseIcon />}
+                        colorScheme="red"
+                        variant="ghost"
+                        aria-label={`Eliminar ${prov}`}
+                        onClick={() => handleRemoveProveedor(prov)}
+                      />
+                    </HStack>
+                  </Th>
+                  <Th fontSize="sm">{prov} Total</Th>
+                </React.Fragment>
+              ))}
+              <Th>Acciones</Th>
             </Tr>
-          ) : (
-            items.map((item, index) => (
-              <Tr key={index}>
-                <Td>{item.item}</Td>
-                <Td>
-                  <Input
-                    value={item.descripcion}
-                    onChange={(e) => handleChange(index, "descripcion", e.target.value)}
-                  />
-                </Td>
-                <Td>
-                  <Input
-                    value={item.referencia}
-                    onChange={(e) => handleChange(index, "referencia", e.target.value)}
-                  />
-                </Td>
-                <Td>
-                  <Input
-                    type="number"
-                    value={item.cantidad}
-                    onChange={(e) => handleChange(index, "cantidad", parseInt(e.target.value) || 0)}
-                  />
-                </Td>
-                <Td>
-                  <Input
-                    value={item.unidad}
-                    onChange={(e) => handleChange(index, "unidad", e.target.value)}
-                  />
-                </Td>
-                <Td>
-                  <Button size="sm" colorScheme="red" onClick={() => handleRemove(index)}>
-                    Eliminar
-                  </Button>
+          </Thead>
+          <Tbody>
+            {items.length === 0 ? (
+              <Tr>
+                <Td colSpan={6 + proveedores.length * 2} textAlign="center" py={4}>
+                  No hay ítems cargados.
                 </Td>
               </Tr>
-            ))
-          )}
-        </Tbody>
-      </Table>
+            ) : (
+              items.map((item, index) => (
+                <Tr key={index}>
+                  <Td>{item.item}</Td>
+                  <Td>
+                    <Input value={item.descripcion} onChange={(e) => handleChange(index, "descripcion", e.target.value)} />
+                  </Td>
+                  <Td>
+                    <Input value={item.referencia} onChange={(e) => handleChange(index, "referencia", e.target.value)} />
+                  </Td>
+                  <Td>
+                    <Input type="number" value={item.cantidad} onChange={(e) => handleChange(index, "cantidad", parseInt(e.target.value) || 0)} />
+                  </Td>
+                  <Td>
+                    <Input value={item.unidad} onChange={(e) => handleChange(index, "unidad", e.target.value)} />
+                  </Td>
+                  {proveedores.map((prov) => {
+                    const precioUnit = item.precios?.[prov] || 0;
+                    const total = precioUnit * (item.cantidad || 0);
+                    return (
+                      <React.Fragment key={prov}>
+                        <Td>
+                          <Input
+                            type="number"
+                            value={precioUnit}
+                            onChange={(e) => handleProveedorChange(index, prov, e.target.value)}
+                          />
+                        </Td>
+                        <Td>
+                          <Text>{isNaN(total) ? "-" : total.toFixed(2)} €</Text>
+                        </Td>
+                      </React.Fragment>
+                    );
+                  })}
+                  <Td>
+                    <Button size="sm" colorScheme="red" onClick={() => handleRemove(index)}>Eliminar</Button>
+                  </Td>
+                </Tr>
+              ))
+            )}
+          </Tbody>
+        </Table>
+      </Box>
 
       <HStack spacing={4} mt={4}>
         <Button onClick={handleAddItem} colorScheme="gray">Añadir ítem manual</Button>
@@ -273,6 +329,8 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
       </HStack>
     </Box>
   );
+
+
 };
 
 ExcelUploadCotizacion.propTypes = {
