@@ -8,13 +8,14 @@ import {
   VStack,
   HStack,
   Stack,
+  Link,
   useToast,
   Heading,
   FormLabel,
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
 
-const CotizacionProveedor = ({ numeroPedido }) => {
+const AsistenciaProveedor = ({ numeroAsistencia }) => {
   const [cotizaciones, setCotizaciones] = useState([]);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -23,9 +24,9 @@ const CotizacionProveedor = ({ numeroPedido }) => {
   useEffect(() => {
     const fetchCotizaciones = async () => {
       const { data, error } = await supabase
-        .from("cotizaciones_proveedor")
-        .select("*")
-        .eq("numero_pedido", numeroPedido);
+        .from("asistencias_proveedor")
+        .select("numero_asistencia, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at")
+        .eq("numero_asistencia", numeroAsistencia);
 
       if (error) {
         console.error("Error cargando cotizaciones:", error);
@@ -35,7 +36,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
     };
 
     fetchCotizaciones();
-  }, [numeroPedido]);
+  }, [numeroAsistencia]);
 
   const handleAddCotizacion = () => {
     if (cotizaciones.length >= 3) return;
@@ -58,9 +59,9 @@ const CotizacionProveedor = ({ numeroPedido }) => {
     if (proveedor && proveedor.trim() !== "") {
       try {
         const { error } = await supabase
-          .from("cotizaciones_proveedor")
+          .from("asistencias_proveedor")
           .delete()
-          .match({ numero_pedido: numeroPedido, proveedor });
+          .match({ numero_asistencia: numeroAsistencia, proveedor });
 
         if (error) {
           console.error("Error al borrar proveedor en Supabase:", error);
@@ -87,22 +88,32 @@ const CotizacionProveedor = ({ numeroPedido }) => {
 
   const uploadFile = async (file, tipo, proveedor) => {
     const sanitizedProveedor = proveedor.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const path = `${numeroPedido}/${sanitizedProveedor}/${tipo}-${Date.now()}.pdf`;
+    const path = `${numeroAsistencia}/${sanitizedProveedor}/${tipo}-${Date.now()}.pdf`;
 
     const { error } = await supabase.storage
-      .from("cotizaciones")
-      .upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
+      .from("asistencias")
+      .upload(path, file, { cacheControl: "3600", upsert: false });
 
     if (error) throw new Error(`Error al subir ${tipo}: ` + error.message);
 
     return path;
   };
 
+  const generarSignedUrl = async (path) => {
+    const { data, error } = await supabase.storage
+      .from("asistencias")
+      .createSignedUrl(path, 3600);
+
+    if (error) {
+      toast({ title: "No se pudo generar URL firmada", status: "error" });
+      return null;
+    }
+
+    return data.signedUrl;
+  };
+
   const deleteFileFromSupabase = async (path) => {
-    const { error } = await supabase.storage.from("cotizaciones").remove([path]);
+    const { error } = await supabase.storage.from("asistencias").remove([path]);
     if (error) {
       console.error("Error al borrar archivo:", error.message);
       throw new Error("No se pudo borrar el archivo");
@@ -151,22 +162,9 @@ const CotizacionProveedor = ({ numeroPedido }) => {
     }
   };
 
-  const handleVerArchivo = async (path) => {
-    const { data, error } = await supabase.storage
-      .from("cotizaciones")
-      .createSignedUrl(path, 3600);
-
-    if (error) {
-      toast({ title: "Error generando URL", status: "error" });
-      return;
-    }
-
-    window.open(data.signedUrl, "_blank");
-  };
-
   const handleSave = async () => {
     const incompletas = cotizaciones.some(
-      (c) => !c.proveedor.trim() || !c.path_cotizacion
+      (c) => !c.proveedor?.trim() || !c.path_cotizacion
     );
 
     if (incompletas) {
@@ -179,41 +177,39 @@ const CotizacionProveedor = ({ numeroPedido }) => {
 
     try {
       for (const cot of cotizaciones) {
-        const proveedor = cot.proveedor.trim();
-        const valor = parseFloat(cot.valor);
-        const valor_factura =
-          cot.valor_factura === "" || cot.valor_factura == null
-            ? null
-            : parseFloat(cot.valor_factura);
+        const dataToSend = {
+          numero_asistencia: numeroAsistencia,
+          proveedor: cot.proveedor.trim(),
+          valor: isNaN(parseFloat(cot.valor)) ? 0 : parseFloat(cot.valor),
+          estado: cot.estado || "pendiente",
+          path_cotizacion: cot.path_cotizacion || null,
+          path_invoice: cot.path_invoice || null,
+          valor_factura: isNaN(parseFloat(cot.valor_factura)) ? 0 : parseFloat(cot.valor_factura),
+        };
 
-        if (!proveedor || isNaN(valor)) {
+        const { error } = await supabase
+          .from("asistencias_proveedor")
+          .upsert(dataToSend, {
+            onConflict: ["numero_asistencia", "proveedor"],
+          });
+
+        if (error) {
+          console.error("Error detallado:", error);
           toast({
-            title: `Proveedor o valor inválido para "${cot.proveedor}"`,
+            title: "Error al guardar en Supabase",
+            description: error.message,
             status: "error",
           });
           return;
         }
-        await supabase.from("cotizaciones_proveedor").upsert(
-          {
-            numero_pedido: numeroPedido,
-            proveedor,
-            valor,
-            estado: cot.estado,
-            path_cotizacion: cot.path_cotizacion,
-            path_invoice: cot.path_invoice || null,
-            valor_factura,
-          },
-          { onConflict: ["numero_pedido", "proveedor"] }
-        );
       }
 
       toast({ title: "Cotizaciones guardadas", status: "success" });
     } catch (err) {
-      console.error("Error al guardar cotización:", err);
-      toast({ title: "Error al guardar en Supabase", status: "error" });
+      console.error(err);
+      toast({ title: "Error inesperado", status: "error" });
     }
   };
-
 
   return (
     <Box mt={8}>
@@ -230,6 +226,9 @@ const CotizacionProveedor = ({ numeroPedido }) => {
                   value={cot.proveedor}
                   onChange={(e) => handleChange(index, "proveedor", e.target.value)}
                 />
+                <Text fontSize="sm" color="gray.500" mt={1}>
+                  Para modificar el nombre del proveedor, elimínalo y vuelve a añadirlo.
+                </Text>
               </Box>
 
               <Box>
@@ -292,27 +291,38 @@ const CotizacionProveedor = ({ numeroPedido }) => {
                   cursor="pointer"
                   color="blue.600"
                   fontWeight="semibold"
-                  textAlign="center"
                   display="block"
-
+                  textAlign="center"
                 >
                   Seleccionar archivo
                 </FormLabel>
 
                 {cot.path_cotizacion && (
-                  <>
-                    <Text fontSize="sm" mt={2} noOfLines={1}>
+                  <VStack mt={3} spacing={2}>
+                    <Text fontSize="sm" noOfLines={1}>
                       {cot.path_cotizacion.split("/").pop()}
                     </Text>
-                    <HStack mt={2} spacing={4} justify="center">
-                      <Button size="sm" colorScheme="blue" onClick={() => handleVerArchivo(cot.path_cotizacion)}>
-                        Ver cotización
+                    <HStack spacing={4} justify="center">
+                      <Button
+                        size="sm"
+                        colorScheme="blue"
+                        onClick={async () => {
+                          const url = await generarSignedUrl(cot.path_cotizacion);
+                          if (url) window.open(url, "_blank");
+                        }}
+                      >
+                        Ver archivo
                       </Button>
-                      <Button size="sm" colorScheme="red" variant="outline" onClick={() => handleDeleteArchivo(index, "cotizacion")}>
+                      <Button
+                        size="sm"
+                        colorScheme="red"
+                        variant="outline"
+                        onClick={() => handleDeleteArchivo(index, "cotizacion")}
+                      >
                         🗑️ Eliminar
                       </Button>
                     </HStack>
-                  </>
+                  </VStack>
                 )}
               </Box>
 
@@ -325,6 +335,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
                 />
               </Box>
 
+              
               {/* Factura PDF */}
               <Box
                 border="2px dashed"
@@ -359,23 +370,35 @@ const CotizacionProveedor = ({ numeroPedido }) => {
                   cursor="pointer"
                   color="blue.600"
                   fontWeight="semibold"
-                  textAlign="center"
                   display="block"
-
+                  textAlign="center"
                 >
                   Seleccionar archivo
                 </FormLabel>
 
+                {/* Mostrar nombre del archivo */}
                 {cot.path_invoice && (
                   <>
                     <Text fontSize="sm" mt={2} noOfLines={1}>
                       {cot.path_invoice.split("/").pop()}
                     </Text>
                     <HStack mt={2} spacing={4} justify="center">
-                      <Button size="sm" colorScheme="blue" onClick={() => handleVerArchivo(cot.path_invoice)}>
+                      <Button
+                        size="sm"
+                        colorScheme="blue"
+                        onClick={async () => {
+                          const url = await generarSignedUrl(cot.path_invoice);
+                          if (url) window.open(url, "_blank");
+                        }}
+                      >
                         Ver factura
                       </Button>
-                      <Button size="sm" colorScheme="red" variant="outline" onClick={() => handleDeleteArchivo(index, "invoice")}>
+                      <Button
+                        size="sm"
+                        colorScheme="red"
+                        variant="outline"
+                        onClick={() => handleDeleteArchivo(index, "invoice")}
+                      >
                         🗑️ Eliminar
                       </Button>
                     </HStack>
@@ -403,8 +426,8 @@ const CotizacionProveedor = ({ numeroPedido }) => {
   );
 };
 
-CotizacionProveedor.propTypes = {
-  numeroPedido: PropTypes.string.isRequired,
+AsistenciaProveedor.propTypes = {
+  numeroAsistencia: PropTypes.string.isRequired,
 };
 
-export default CotizacionProveedor;
+export default AsistenciaProveedor;

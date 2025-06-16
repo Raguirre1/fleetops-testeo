@@ -1,33 +1,50 @@
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import PropTypes from "prop-types";
+import {
+  Box,
+  Button,
+  Input,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Text,
+  HStack,
+  FormLabel,
+  useToast,
+} from "@chakra-ui/react";
+import { supabase } from "../supabaseClient";
 
 const ExcelUploadCotizacion = ({ numeroPedido }) => {
   const [items, setItems] = useState([]);
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const storageKey = `cotizacion-${numeroPedido}`;
+  const [isDragging, setIsDragging] = useState(false);
+  const [nombreArchivo, setNombreArchivo] = useState("");
+  const toast = useToast();
 
   useEffect(() => {
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setItems(parsed);
-        }
-      } catch (e) {
-        console.error("Error parsing localStorage data:", e);
+    const fetchItems = async () => {
+      const { data, error } = await supabase
+        .from("lineas_cotizacion")
+        .select("*")
+        .eq("numero_pedido", numeroPedido);
+
+      if (error) {
+        toast({ title: "Error cargando datos", status: "error" });
+        console.error(error);
+      } else {
+        setItems(data);
       }
-    }
+    };
+
+    fetchItems();
   }, [numeroPedido]);
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
+  const processExcel = async (file) => {
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
@@ -35,23 +52,84 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
       const formattedItems = jsonData.map((row, index) => ({
+        numero_pedido: numeroPedido,
         item: row["Item"] || index + 1,
         descripcion: row["Nombre/Título"] || row["Descripción"] || row["Nombre"] || "",
         referencia: row["Ref. Fabricante"] || row["Referencia"] || "",
         cantidad: row["Cantidad"] || 1,
-        unidad: row["Unidad"] || "Unit"
+        unidad: row["Unidad"] || "Unit",
       }));
 
       if (formattedItems.length === 0) {
-        setError("El archivo no contiene datos reconocibles.");
-        setItems([]);
-      } else {
-        setError("");
+        toast({ title: "El archivo no contiene datos reconocibles", status: "warning" });
+        return;
+      }
+
+      try {
+        const { error } = await supabase.from("lineas_cotizacion").upsert(formattedItems, {
+          onConflict: ["numero_pedido", "item"],
+        });
+
+        if (error) throw error;
+
         setItems(formattedItems);
+        toast({ title: "Archivo procesado y datos guardados", status: "success" });
+      } catch (err) {
+        console.error("Error al guardar en Supabase:", err);
+        toast({ title: "Error al guardar los datos", status: "error" });
       }
     };
 
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setNombreArchivo(file.name);
+      processExcel(file);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      setNombreArchivo(file.name);
+      processExcel(file);
+    }
+  };
+
+  const handleExportToExcel = () => {
+    if (items.length === 0) {
+      toast({ title: "No hay datos para exportar", status: "warning" });
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(items);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Cotizacion");
+
+    XLSX.writeFile(workbook, `Cotizacion_${numeroPedido}.xlsx`);
+  };
+
+  const handleDeleteAll = async () => {
+    try {
+      const { error } = await supabase
+        .from("lineas_cotizacion")
+        .delete()
+        .eq("numero_pedido", numeroPedido);
+
+      if (error) throw error;
+
+      setItems([]);
+      setNombreArchivo("");
+      toast({ title: "Todas las líneas eliminadas", status: "info" });
+    } catch (err) {
+      console.error("Error al eliminar:", err);
+      toast({ title: "Error al eliminar", status: "error" });
+    }
   };
 
   const handleChange = (index, field, value) => {
@@ -60,124 +138,140 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
     setItems(updated);
   };
 
-  const handleRemove = (index) => {
-    const updated = items.filter((_, i) => i !== index);
-    setItems(updated);
-  };
-
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
-      if (items.length === 0) {
-        localStorage.removeItem(storageKey);
-      } else {
-        localStorage.setItem(storageKey, JSON.stringify(items));
-      }
-      setSuccessMessage("¡Cambios guardados correctamente!");
-      setTimeout(() => setSuccessMessage(""), 3000);
+      const { error } = await supabase.from("lineas_cotizacion").upsert(items, {
+        onConflict: ["numero_pedido", "item"],
+      });
+      if (error) throw error;
+      toast({ title: "Cambios guardados en Supabase", status: "success" });
     } catch (err) {
-      setError("Error al guardar los cambios.");
-      console.error("Error saving to localStorage:", err);
+      console.error(err);
+      toast({ title: "Error al guardar los cambios", status: "error" });
     }
   };
 
   const handleAddItem = () => {
     const nextItemNumber = items.length > 0 ? Math.max(...items.map(i => i.item || 0)) + 1 : 1;
-    const newItem = {
-      item: nextItemNumber,
-      descripcion: "",
-      referencia: "",
-      cantidad: 1,
-      unidad: "Unit"
-    };
-    setItems([...items, newItem]);
+    setItems([
+      ...items,
+      {
+        numero_pedido: numeroPedido,
+        item: nextItemNumber,
+        descripcion: "",
+        referencia: "",
+        cantidad: 1,
+        unidad: "Unit",
+      },
+    ]);
+  };
+
+  const handleRemove = (index) => {
+    const updated = items.filter((_, i) => i !== index);
+    setItems(updated);
   };
 
   return (
-    <div className="p-4 border rounded mt-8">
-      <h3 className="text-lg font-semibold mb-4">Linea de Pedidos </h3>
+    <Box mt={8} p={4} borderWidth={1} borderRadius="lg">
+      <Text fontSize="xl" fontWeight="bold" mb={4}>Línea de Pedidos</Text>
 
-      <input
-        type="file"
-        accept=".xlsx,.xls"
-        onChange={handleFileUpload}
-        className="mb-4"
-      />
+      <Box
+        border="2px dashed"
+        borderColor={isDragging ? "blue.300" : "gray.300"}
+        p={6}
+        borderRadius="md"
+        textAlign="center"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+      >
+        <Text fontWeight="medium">Arrastra el archivo Excel aquí</Text>
+        <Input
+          type="file"
+          accept=".xlsx,.xls"
+          onChange={handleFileChange}
+          display="none"
+          id="upload-excel"
+        />
+        <FormLabel htmlFor="upload-excel" cursor="pointer" color="blue.600" fontWeight="semibold">
+          Seleccionar archivo
+        </FormLabel>
+        {nombreArchivo && (
+          <Text fontSize="sm" color="gray.600" mt={2}>
+            Archivo seleccionado: <strong>{nombreArchivo}</strong>
+          </Text>
+        )}
+      </Box>
 
-      {error && <div className="text-red-600 mb-4">{error}</div>}
-      {successMessage && <div className="text-green-600 mb-4">{successMessage}</div>}
+      <HStack spacing={3} mt={4} mb={2}>
+        <Button onClick={handleExportToExcel} colorScheme="green">📤 Exportar Excel</Button>
+        <Button onClick={handleDeleteAll} colorScheme="red">🗑️ Eliminar Todo</Button>
+      </HStack>
 
-      <table className="w-full table-auto border">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2">#</th>
-            <th className="border p-2">Descripción</th>
-            <th className="border p-2">Referencia</th>
-            <th className="border p-2">Cantidad</th>
-            <th className="border p-2">Unidad</th>
-            <th className="border p-2">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, index) => (
-            <tr key={index}>
-              <td className="border p-2 text-center">{item.item}</td>
-              <td className="border p-2">
-                <input
-                  value={item.descripcion}
-                  onChange={(e) => handleChange(index, "descripcion", e.target.value)}
-                  className="w-full border rounded p-1"
-                />
-              </td>
-              <td className="border p-2">
-                <input
-                  value={item.referencia}
-                  onChange={(e) => handleChange(index, "referencia", e.target.value)}
-                  className="w-full border rounded p-1"
-                />
-              </td>
-              <td className="border p-2">
-                <input
-                  type="number"
-                  value={item.cantidad}
-                  onChange={(e) => handleChange(index, "cantidad", parseInt(e.target.value))}
-                  className="w-full border rounded p-1"
-                />
-              </td>
-              <td className="border p-2">
-                <input
-                  value={item.unidad}
-                  onChange={(e) => handleChange(index, "unidad", e.target.value)}
-                  className="w-full border rounded p-1"
-                />
-              </td>
-              <td className="border p-2 text-center">
-                <button
-                  onClick={() => handleRemove(index)}
-                  className="text-red-600 hover:underline"
-                >
-                  Eliminar
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Table variant="simple" size="sm">
+        <Thead bg="gray.100">
+          <Tr>
+            <Th>#</Th>
+            <Th>Descripción</Th>
+            <Th>Referencia</Th>
+            <Th>Cantidad</Th>
+            <Th>Unidad</Th>
+            <Th>Acciones</Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {items.length === 0 ? (
+            <Tr>
+              <Td colSpan={6} textAlign="center" py={4}>No hay ítems cargados.</Td>
+            </Tr>
+          ) : (
+            items.map((item, index) => (
+              <Tr key={index}>
+                <Td>{item.item}</Td>
+                <Td>
+                  <Input
+                    value={item.descripcion}
+                    onChange={(e) => handleChange(index, "descripcion", e.target.value)}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    value={item.referencia}
+                    onChange={(e) => handleChange(index, "referencia", e.target.value)}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    type="number"
+                    value={item.cantidad}
+                    onChange={(e) => handleChange(index, "cantidad", parseInt(e.target.value) || 0)}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    value={item.unidad}
+                    onChange={(e) => handleChange(index, "unidad", e.target.value)}
+                  />
+                </Td>
+                <Td>
+                  <Button size="sm" colorScheme="red" onClick={() => handleRemove(index)}>
+                    Eliminar
+                  </Button>
+                </Td>
+              </Tr>
+            ))
+          )}
+        </Tbody>
+      </Table>
 
-      <div className="mt-4 flex gap-4">
-        <button
-          onClick={handleAddItem}
-          className="bg-gray-300 text-black px-4 py-2 rounded hover:bg-gray-400"
-        >
-          Añadir ítem manual
-        </button>
-        <button
-          onClick={handleSave}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Guardar cambios
-        </button>
-      </div>
-    </div>
+      <HStack spacing={4} mt={4}>
+        <Button onClick={handleAddItem} colorScheme="gray">Añadir ítem manual</Button>
+        <Button onClick={handleSave} colorScheme="blue">Guardar cambios</Button>
+      </HStack>
+    </Box>
   );
 };
 

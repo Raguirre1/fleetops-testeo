@@ -1,61 +1,91 @@
 import React, { useState } from "react";
-import axios from "axios";
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://fleetops-production.up.railway.app";
+import {
+  Box,
+  Button,
+  Flex,
+  FormControl,
+  FormLabel,
+  Input,
+  Heading,
+  Text,
+  useToast,
+} from "@chakra-ui/react";
+import { supabase } from "../supabaseClient"; // Asegúrate de tener este archivo
 
 const Login = ({ onLoginSuccess }) => {
   const [nombre, setNombre] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const toast = useToast();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
 
     try {
-      const response = await axios.post(`${BACKEND_URL}/login`, { nombre, password });
-      const { token, usuario } = response.data;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: nombre, // Supabase requiere email como identificador
+        password,
+      });
 
-      // Guardar en localStorage
-      localStorage.setItem("token", token);
-      localStorage.setItem("nombre", usuario.nombre);
-      localStorage.setItem("rol", usuario.rol);
+      if (error) throw error;
 
-      // Redirigir o activar sesión
-      onLoginSuccess(usuario);
+      const { user } = data;
+      localStorage.setItem("nombre", user.email);
+      onLoginSuccess(user);
 
+      toast({
+        title: "Sesión iniciada",
+        description: `Bienvenido, ${user.email}`,
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
     } catch (err) {
+      console.error("Error de login:", err.message);
       setError("Credenciales incorrectas");
-      console.error("Error al iniciar sesión:", err);
+      toast({
+        title: "Error",
+        description: "Usuario o contraseña incorrectos.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-100">
-      <form onSubmit={handleLogin} className="bg-white p-8 rounded shadow-md w-80">
-        <h2 className="text-2xl font-bold mb-4 text-center">Iniciar sesión</h2>
-
-        <input
-          type="text"
-          placeholder="Usuario"
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          className="w-full p-2 mb-4 border rounded"
-        />
-        <input
-          type="password"
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-2 mb-4 border rounded"
-        />
-        {error && <p className="text-red-500 mb-2">{error}</p>}
-
-        <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
-          Entrar
-        </button>
-      </form>
-    </div>
+    <Flex align="center" justify="center" minH="100vh" bg="gray.100">
+      <Box bg="white" p={8} rounded="md" shadow="md" w="full" maxW="sm">
+        <Heading as="h2" size="lg" mb={6} textAlign="center">
+          Iniciar sesión
+        </Heading>
+        <form onSubmit={handleLogin}>
+          <FormControl id="usuario" mb={4} isRequired>
+            <FormLabel>Email</FormLabel>
+            <Input
+              type="email"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Tu correo electrónico"
+            />
+          </FormControl>
+          <FormControl id="password" mb={4} isRequired>
+            <FormLabel>Contraseña</FormLabel>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Contraseña"
+            />
+          </FormControl>
+          {error && <Text color="red.500" fontSize="sm" mb={3}>{error}</Text>}
+          <Button type="submit" colorScheme="blue" width="full">
+            Entrar
+          </Button>
+        </form>
+      </Box>
+    </Flex>
   );
 };
 

@@ -1,4 +1,21 @@
 import React, { useState } from "react";
+import {
+  Box,
+  Heading,
+  Text,
+  Flex,
+  Select,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Button,
+  TableContainer,
+  Stack,
+  useColorModeValue,
+} from "@chakra-ui/react";
 import PurchaseDetail from "./PurchaseDetail";
 
 function PurchaseDashboard() {
@@ -19,31 +36,53 @@ function PurchaseDashboard() {
     { no: 4, buque: "Hesperides", estado: "Pendiente", fecha: "2025-03-15" },
   ];
 
+  const bg = useColorModeValue("white", "gray.800");
+
   const handleSeleccionarBuque = (event) => {
     setBuqueSeleccionado(event.target.value);
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Barra superior */}
-      <header className="bg-slate-900 text-white p-4 flex justify-between items-center shadow">
-        <h1 className="text-xl font-bold tracking-wide">FleetOps</h1>
-        <nav className="space-x-6">
-          <button className="hover:underline">Compras</button>
-          <button className="hover:underline">Asistencias</button>
-          <button className="hover:underline">SGC</button>
-          <button className="hover:underline">Flota</button>
-          <button className="hover:underline">Económico</button>
-          <button className="hover:underline">Documentación</button>
-        </nav>
-        <div className="flex items-center gap-2">
-          <span className="text-sm">Hi, RAFAEL</span>
-          <div className="bg-teal-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">R</div>
-        </div>
-      </header>
+    <Box minH="100vh" bg="gray.100">
+      {/* Encabezado tipo ERP */}
+      <Flex
+        as="header"
+        bg="teal.700"
+        color="white"
+        px={6}
+        py={4}
+        justify="space-between"
+        align="center"
+        shadow="md"
+      >
+        <Heading size="md">FleetOps</Heading>
+        <Flex gap={4} fontSize="sm">
+          {["Compras", "Asistencias", "SGC", "Flota", "Económico", "Documentación"].map((modulo) => (
+            <Button key={modulo} variant="ghost" colorScheme="whiteAlpha" size="sm">
+              {modulo}
+            </Button>
+          ))}
+        </Flex>
+        <Flex align="center" gap={3}>
+          <Text fontSize="sm">Hola, Rafael</Text>
+          <Box
+            bg="white"
+            color="teal.700"
+            fontWeight="bold"
+            rounded="full"
+            w="32px"
+            h="32px"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+          >
+            R
+          </Box>
+        </Flex>
+      </Flex>
 
       {/* Contenido principal */}
-      <main className="p-6">
+      <Box p={6}>
         {pedidoSeleccionado ? (
           <PurchaseDetail
             key={pedidoSeleccionado.no}
@@ -51,69 +90,79 @@ function PurchaseDashboard() {
             volver={() => setPedidoSeleccionado(null)}
           />
         ) : (
-          <>
-            <h2 className="text-2xl font-bold mb-6">📊 Dashboard de Compras</h2>
+          <Box bg={bg} p={6} rounded="md" shadow="sm">
+            <Heading size="lg" mb={4}>
+              📊 Dashboard de Compras
+            </Heading>
 
-            {/* Selector de buque */}
-            <div className="mb-4">
-              <select
-                className="border border-gray-300 p-2 rounded shadow-sm"
-                onChange={handleSeleccionarBuque}
+            <Stack maxW="300px" mb={6}>
+              <Select
+                placeholder="Selecciona un buque"
                 value={buqueSeleccionado}
+                onChange={handleSeleccionarBuque}
               >
-                <option value="">Selecciona un buque</option>
                 {buques.map((buque) => (
                   <option key={buque.id} value={buque.nombre}>
                     {buque.nombre}
                   </option>
                 ))}
-              </select>
-            </div>
-            
+              </Select>
+            </Stack>
 
-            {/* Tabla de estado de compras */}
-            {buqueSeleccionado && (
-              <div className="bg-white p-4 rounded shadow-md">
-                <h3 className="text-lg font-semibold mb-4">
-                  Estado de compras para el buque <span className="text-blue-600">{buqueSeleccionado}</span>
-                </h3>
-                <table className="min-w-full border border-gray-200 text-sm">
-                  <thead>
-                    <tr className="bg-slate-100">
-                      <th className="border px-4 py-2">No</th>
-                      <th className="border px-4 py-2">Buque</th>
-                      <th className="border px-4 py-2">Estado</th>
-                      <th className="border px-4 py-2">Fecha</th>
-                      <th className="border px-4 py-2">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {estadoCompras
-                      .filter((compra) => compra.buque === buqueSeleccionado)
-                      .map((compra) => (
-                        <tr key={compra.no} className="hover:bg-slate-50">
-                          <td className="border px-4 py-2 text-center">{compra.no}</td>
-                          <td className="border px-4 py-2">{compra.buque}</td>
-                          <td className="border px-4 py-2">{compra.estado}</td>
-                          <td className="border px-4 py-2">{compra.fecha}</td>
-                          <td className="border px-4 py-2 text-center">
-                            <button
-                              className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-                              onClick={() => setPedidoSeleccionado(compra)}
-                            >
-                              Ver detalle
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+            {!buqueSeleccionado ? (
+              <Text fontStyle="italic" color="gray.600">
+                Selecciona un buque para ver sus pedidos.
+              </Text>
+            ) : (
+              <>
+                <Text mb={2}>
+                  Estado de compras para el buque{" "}
+                  <Text as="span" fontWeight="bold" color="teal.600">
+                    {buqueSeleccionado}
+                  </Text>
+                </Text>
+
+                <TableContainer>
+                  <Table variant="striped" colorScheme="gray" size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th>No</Th>
+                        <Th>Buque</Th>
+                        <Th>Estado</Th>
+                        <Th>Fecha</Th>
+                        <Th textAlign="center">Acciones</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {estadoCompras
+                        .filter((compra) => compra.buque === buqueSeleccionado)
+                        .map((compra) => (
+                          <Tr key={compra.no}>
+                            <Td>{compra.no}</Td>
+                            <Td>{compra.buque}</Td>
+                            <Td>{compra.estado}</Td>
+                            <Td>{compra.fecha}</Td>
+                            <Td textAlign="center">
+                              <Button
+                                size="sm"
+                                colorScheme="blue"
+                                aria-label={`Ver detalle de pedido ${compra.no}`}
+                                onClick={() => setPedidoSeleccionado(compra)}
+                              >
+                                Ver detalle
+                              </Button>
+                            </Td>
+                          </Tr>
+                        ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              </>
             )}
-          </>
+          </Box>
         )}
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }
 

@@ -2,17 +2,57 @@ import React, { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import ExcelUploadCotizacion from "./ExcelUploadCotizacion";
 import CotizacionProveedor from "./CotizacionProveedor";
+import Pago from "./Pago";
 import { supabase } from "../supabaseClient";
+import {
+  Box,
+  Button,
+  FormControl,
+  FormLabel,
+  Input,
+  Textarea,
+  VStack,
+  Text,
+  Alert,
+  AlertIcon,
+  Spinner,
+  Heading,
+  Divider,
+  Flex,
+  Link,
+  useToast,
+  HStack,
+} from "@chakra-ui/react";
 
 const PurchaseDetail = ({ pedido, volver }) => {
   const [comentarios, setComentarios] = useState("");
   const [infoadicional, setInfoadicional] = useState("");
-  const [archivos, setArchivos] = useState([]);
   const [archivosSubidos, setArchivosSubidos] = useState([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  const toast = useToast();
+
+  const loadArchivosSubidos = async () => {
+    const folderPath = `${pedido.numeroPedido}/documentos/`;
+    const { data: files, error: fileError } = await supabase.storage
+      .from("cotizaciones")
+      .list(folderPath);
+
+    if (fileError) {
+      console.error("Error al cargar archivos:", fileError.message);
+      return;
+    }
+
+    const archivos = files
+      .filter((file) => file.name !== ".emptyFolderPlaceholder")
+      .map((file) => ({
+        nombre: file.name,
+        path: `${folderPath}${file.name}`,
+      }));
+
+    setArchivosSubidos(archivos);
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -31,22 +71,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
           setInfoadicional(data.infoadicional || "");
         }
 
-        const { data: files, error: fileError } = await supabase.storage
-          .from("cotizaciones")
-          .list(`${pedido.numeroPedido}/documentos/`);
-
-        if (fileError) throw fileError;
-
-        const archivosConUrl = await Promise.all(
-          files.map(async (file) => {
-            const { data: urlData } = supabase.storage
-              .from("cotizaciones")
-              .getPublicUrl(`${pedido.numeroPedido}/documentos/${file.name}`);
-            return { nombre: file.name, url: urlData.publicUrl };
-          })
-        );
-
-        setArchivosSubidos(archivosConUrl);
+        await loadArchivosSubidos();
       } catch (err) {
         setError("Error al cargar los datos. Revisa la consola para más detalles.");
         console.error("Error en loadData:", err);
@@ -73,163 +98,143 @@ const PurchaseDetail = ({ pedido, volver }) => {
 
       if (error) throw error;
 
-      setSuccessMessage("✅ Datos guardados en Supabase");
-      setTimeout(() => setSuccessMessage(""), 3000);
+      toast({ title: "Datos guardados", status: "success", duration: 3000, isClosable: true });
     } catch (err) {
       console.error("Error en saveToSupabase:", err);
-      setError("❌ Error al guardar en Supabase");
+      toast({ title: "Error al guardar en Supabase", status: "error", duration: 3000, isClosable: true });
     }
-  };
-
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    validateFiles(files);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    validateFiles(files);
+    validateAndUpload(files);
   };
 
-  const validateFiles = (files) => {
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    validateAndUpload(files);
+  };
+
+  const validateAndUpload = (files) => {
     const MAX_SIZE = 10 * 1024 * 1024;
     const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf", "eml", "msg"];
 
     const validFiles = files.filter((file) => {
       const ext = file.name.split(".").pop().toLowerCase();
-      if (!ALLOWED_EXTENSIONS.includes(ext)) {
-        setError(`Tipo de archivo no permitido: ${file.name}`);
-        return false;
-      }
-      if (file.size > MAX_SIZE) {
-        setError(`El archivo ${file.name} excede el límite de 10MB`);
-        return false;
-      }
-      return true;
+      return ALLOWED_EXTENSIONS.includes(ext) && file.size <= MAX_SIZE;
     });
 
     if (validFiles.length > 0) {
-      setArchivos(validFiles);
       setError("");
+      uploadFiles(validFiles);
+    } else {
+      toast({ title: "Archivo no válido o excede 10MB", status: "warning" });
     }
   };
 
-  const uploadFiles = async () => {
-    if (archivos.length === 0) return;
+  const uploadFiles = async (files) => {
+    for (const file of files) {
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
+      const fileName = `${timestamp}_${safeName}`;
+      const path = `${pedido.numeroPedido}/documentos/${fileName}`;
 
-    try {
-      setIsLoading(true);
+      const { error: uploadError } = await supabase.storage
+        .from("cotizaciones")
+        .upload(path, file, { cacheControl: "3600", upsert: false });
 
-      for (const archivo of archivos) {
-        const { error } = await supabase.storage
-          .from("cotizaciones")
-          .upload(`${pedido.numeroPedido}/documentos/${archivo.name}`, archivo, {
-            cacheControl: "3600",
-            upsert: true,
-          });
-
-        if (error) throw error;
+      if (!uploadError) {
+        setArchivosSubidos((prev) => [...prev, { nombre: fileName, path }]);
+        toast({ title: `Archivo ${file.name} subido`, status: "success" });
+      } else {
+        toast({ title: `Error subiendo ${file.name}`, status: "error" });
       }
-
-      const { data: files } = await supabase.storage
-        .from("cotizaciones")
-        .list(`${pedido.numeroPedido}/documentos/`);
-
-      const archivosConUrl = await Promise.all(
-        files.map(async (file) => {
-          const { data: urlData } = supabase.storage
-            .from("cotizaciones")
-            .getPublicUrl(`${pedido.numeroPedido}/documentos/${file.name}`);
-          return { nombre: file.name, url: urlData.publicUrl };
-        })
-      );
-
-      setArchivosSubidos(archivosConUrl);
-      setArchivos([]);
-      setSuccessMessage("¡Archivos subidos correctamente!");
-      setTimeout(() => setSuccessMessage(""), 3000);
-    } catch (err) {
-      setError("Error al subir archivos.");
-      console.error("uploadFiles error:", err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const handleDeleteFile = async (fileName) => {
-    try {
-      const { error } = await supabase.storage
-        .from("cotizaciones")
-        .remove([`${pedido.numeroPedido}/documentos/${fileName}`]);
+  const handleDeleteFile = async (path) => {
+    const { error } = await supabase.storage.from("cotizaciones").remove([path]);
 
-      if (error) throw error;
+    if (error) {
+      console.error("❌ Supabase error:", error);
+      toast({ title: "Error al eliminar archivo", status: "error" });
+    } else {
+      setArchivosSubidos((prev) => prev.filter((file) => file.path !== path));
+      toast({ title: "Archivo eliminado", status: "success" });
+    }
+  };
 
-      setArchivosSubidos((prev) => prev.filter((file) => file.nombre !== fileName));
-      setSuccessMessage(`Archivo ${fileName} eliminado.`);
-      setTimeout(() => setSuccessMessage(""), 3000);
-    } catch (err) {
-      setError(`Error al eliminar archivo: ${fileName}`);
-      console.error("handleDeleteFile error:", err);
+  const handleVerArchivo = async (filePath) => {
+    const { data, error } = await supabase.storage
+      .from("cotizaciones")
+      .createSignedUrl(filePath, 3600);
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    } else {
+      toast({ title: "Error al generar enlace", status: "error" });
+    }
+  };
+  const handleVolverConConfirmacion = () => {
+    const confirmar = window.confirm(
+    "¿Seguro que quieres volver?\nAsegúrate de guardar los cambios antes de continuar."
+    );
+    if (confirmar) {
+     volver(pedido);
     }
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6 p-4 bg-gray-100 border rounded text-gray-800 space-y-1">
-        <h2 className="text-xl font-bold text-blue-800 mb-2">📦 Detalle del Pedido</h2>
-        <p><strong>Nº Pedido:</strong> {pedido.numeroPedido}</p>
-        <p><strong>Título:</strong> {pedido.tituloPedido || "—"}</p>
-        <p><strong>Buque:</strong> {pedido.buque || "—"}</p>
-        <p><strong>Solicitante:</strong> {pedido.usuario || "—"}</p>
-        <p><strong>Urgencia:</strong> {pedido.urgencia || "—"}</p>
-        <p><strong>Fecha de pedido:</strong> {pedido.fechaPedido || "—"}</p>
-        <p><strong>Fecha de entrega:</strong> {pedido.fechaEntrega || "—"}</p>
-        <p><strong>Cuenta contable:</strong> {pedido.numeroCuenta || "—"}</p>
-        <p><strong>Estado:</strong> {pedido.estado || "—"}</p>
-      </div>
+    <Box p={6} maxW="4xl" mx="auto">
+      <Box mb={6} p={4} bg="gray.100" borderRadius="md">
+        <Heading size="md" color="blue.600" mb={2}>📦 Detalle del Pedido</Heading>
+        <Text><strong>Nº Pedido:</strong> {pedido.numeroPedido}</Text>
+        <Text><strong>Título:</strong> {pedido.tituloPedido || "—"}</Text>
+        <Text><strong>Buque:</strong> {pedido.buque || "—"}</Text>
+        <Text><strong>Solicitante:</strong> {pedido.usuario || "—"}</Text>
+        <Text><strong>Urgencia:</strong> {pedido.urgencia || "—"}</Text>
+        <Text><strong>Fecha de pedido:</strong> {pedido.fechaPedido || "—"}</Text>
+        <Text><strong>Fecha de entrega:</strong> {pedido.fechaEntrega || "—"}</Text>
+        <Text><strong>Cuenta contable:</strong> {pedido.numeroCuenta || "—"}</Text>
+        <Text><strong>Estado:</strong> {pedido.estado || "—"}</Text>
+      </Box>
 
-      {error && <div className="bg-red-100 text-red-800 p-3 mb-4 rounded">{error}</div>}
-      {successMessage && <div className="bg-green-100 text-green-800 p-3 mb-4 rounded">{successMessage}</div>}
+      {error && <Alert status="error" mb={4}><AlertIcon />{error}</Alert>}
+      {isLoading && <Spinner size="xl" />}
 
-      <div className="grid gap-6 mb-8">
-        <div>
-          <label className="block mb-2 font-medium">Comentarios</label>
-          <textarea
+      <VStack spacing={6} align="stretch">
+        <FormControl>
+          <FormLabel>Comentarios</FormLabel>
+          <Textarea
             value={comentarios}
             onChange={(e) => setComentarios(e.target.value)}
-            className="w-full p-3 border rounded"
             rows={4}
           />
-        </div>
+        </FormControl>
 
-        <div>
-          <label className="block mb-2 font-medium">Información adicional</label>
-          <textarea
+        <FormControl>
+          <FormLabel>Información adicional</FormLabel>
+          <Textarea
             value={infoadicional}
             onChange={(e) => setInfoadicional(e.target.value)}
-            className="w-full p-3 border rounded"
             rows={4}
           />
-        </div>
-      </div>
+        </FormControl>
 
-      <button
-        onClick={handleSaveToSupabase}
-        disabled={isLoading}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-      >
-        Guardar cambios
-      </button>
+        <Button onClick={handleSaveToSupabase} colorScheme="blue" isLoading={isLoading}>
+          Guardar cambios
+        </Button>
 
-      <div className="mt-12">
-        <h3 className="text-xl font-semibold mb-4">Documentación Adicional</h3>
+        <Divider />
 
-        <div
-          className={`border-2 border-dashed p-8 text-center rounded-lg mb-4 ${
-            isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
-          }`}
+        <Heading size="md">📁 Documentación Adicional</Heading>
+        <Box
+          border="2px dashed"
+          borderColor={isDragging ? "blue.300" : "gray.300"}
+          p={6}
+          borderRadius="md"
+          textAlign="center"
           onDragOver={(e) => {
             e.preventDefault();
             setIsDragging(true);
@@ -237,90 +242,75 @@ const PurchaseDetail = ({ pedido, volver }) => {
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
         >
-          <p>Arrastra archivos aquí o</p>
-          <input
+          <Text fontWeight="medium">Arrastra archivos (PDF, JPG, EML, etc.)</Text>
+          <Input
             type="file"
-            id="file-upload"
-            className="hidden"
             multiple
             accept=".jpg,.jpeg,.png,.pdf,.eml,.msg"
             onChange={handleFileChange}
+            display="none"
+            id="upload-documentos"
           />
-          <label
-            htmlFor="file-upload"
-            className="inline-block mt-2 px-4 py-2 bg-gray-100 rounded cursor-pointer hover:bg-gray-200"
+          <FormLabel
+            htmlFor="upload-documentos"
+            cursor="pointer"
+            color="blue.600"
+            fontWeight="semibold"
+            display="block"
+            textAlign="center"
           >
             Seleccionar archivos
-          </label>
-          <p className="text-sm text-gray-500 mt-2">Formatos: JPG, PNG, PDF, EML, MSG (Máx. 10MB)</p>
-        </div>
-
-        {archivos.length > 0 && (
-          <div className="mb-6">
-            <h4 className="font-medium mb-2">Archivos a subir:</h4>
-            <ul className="space-y-2">
-              {archivos.map((file, index) => (
-                <li key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <span>{file.name}</span>
-                  <button
-                    onClick={() => setArchivos(archivos.filter((_, i) => i !== index))}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button
-              onClick={uploadFiles}
-              disabled={isLoading}
-              className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
-            >
-              Subir {archivos.length} archivo(s)
-            </button>
-          </div>
-        )}
+          </FormLabel>
+        </Box>
 
         {archivosSubidos.length > 0 && (
-          <div>
-            <h4 className="font-medium mb-2">Archivos existentes:</h4>
-            <ul className="space-y-2">
-              {archivosSubidos.map((file, index) => (
-                <li key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <div className="flex items-center gap-3">
-                    <a
-                      href={file.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
-                    >
-                      {file.nombre}
-                    </a>
-                    <button
-                      onClick={() => handleDeleteFile(file.nombre)}
-                      className="text-red-600 hover:text-red-800 text-xl"
-                      title="Eliminar archivo"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <VStack align="start" spacing={4} mt={4}>
+            {archivosSubidos.map((file, index) => (
+              <Box
+                key={index}
+                p={3}
+                borderWidth="1px"
+                borderRadius="md"
+                w="100%"
+                bg="gray.50"
+                boxShadow="sm"
+              >
+                <Text fontSize="sm" noOfLines={1}>
+                  {file.nombre}
+                </Text>
+                <HStack mt={2} spacing={3}>
+                  <Button
+                    size="sm"
+                    colorScheme="blue"
+                    onClick={() => handleVerArchivo(file.path)}
+                  >
+                    Ver archivo
+                  </Button>
+                  <Button
+                    size="sm"
+                    colorScheme="red"
+                    variant="outline"
+                    onClick={() => handleDeleteFile(file.path)}
+                  >
+                    🗑️ Eliminar
+                  </Button>
+                </HStack>
+              </Box>
+            ))}
+          </VStack>
         )}
+
 
         <ExcelUploadCotizacion numeroPedido={pedido.numeroPedido} />
         <CotizacionProveedor numeroPedido={pedido.numeroPedido} />
-      </div>
+        <Pago numeroPedido={pedido.numeroPedido} />
 
-      <button
-        onClick={volver}
-        className="mt-8 bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-      >
-        Volver
-      </button>
-    </div>
+        <Button onClick={handleVolverConConfirmacion} colorScheme="gray" mt={6}>
+          Volver
+        </Button>
+
+      </VStack>
+    </Box>
   );
 };
 

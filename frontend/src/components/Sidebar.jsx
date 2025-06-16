@@ -1,36 +1,64 @@
 import React from "react";
+import {
+  Box,
+  Text,
+  VStack,
+  Button,
+  Heading,
+  useColorModeValue,
+} from "@chakra-ui/react";
+import { FiShoppingCart, FiTool, FiFileText } from "react-icons/fi";
 
 function Sidebar({ setModule }) {
+  const bg = useColorModeValue("gray.800", "gray.700");
+  const hoverBg = useColorModeValue("gray.700", "gray.600");
+
   return (
-    <div className="bg-gray-800 text-white w-1/4 p-6 space-y-4">
-      <h2 className="text-xl font-semibold mb-4 text-white">Selecciona un Módulo</h2>
-      <ul className="space-y-2">
-        <li>
-          <button
-            onClick={() => setModule("Compras")}
-            className="w-full text-left py-2 px-4 rounded hover:bg-gray-600 transition duration-300"
-          >
-            Compras
-          </button>
-        </li>
-        <li>
-          <button
-            onClick={() => setModule("Asistencias Técnicas")}
-            className="w-full text-left py-2 px-4 rounded hover:bg-gray-600 transition duration-300"
-          >
-            Asistencias Técnicas
-          </button>
-        </li>
-        <li>
-          <button
-            onClick={() => setModule("SGC")}
-            className="w-full text-left py-2 px-4 rounded hover:bg-gray-600 transition duration-300"
-          >
-            SGC
-          </button>
-        </li>
-      </ul>
-    </div>
+    <Box
+      as="nav"
+      role="navigation"
+      w={{ base: "full", md: "250px" }}
+      minH="100vh"
+      bg={bg}
+      color="white"
+      p={6}
+    >
+      <Heading size="md" mb={6}>
+        Selecciona un Módulo
+      </Heading>
+      <VStack spacing={3} align="stretch">
+        <Button
+          leftIcon={<FiShoppingCart />}
+          onClick={() => setModule("Compras")}
+          variant="ghost"
+          justifyContent="flex-start"
+          _hover={{ bg: hoverBg }}
+          aria-label="Módulo de Compras"
+        >
+          Compras
+        </Button>
+        <Button
+          leftIcon={<FiTool />}
+          onClick={() => setModule("Asistencias Técnicas")}
+          variant="ghost"
+          justifyContent="flex-start"
+          _hover={{ bg: hoverBg }}
+          aria-label="Módulo de Asistencias Técnicas"
+        >
+          Asistencias Técnicas
+        </Button>
+        <Button
+          leftIcon={<FiFileText />}
+          onClick={() => setModule("SGC")}
+          variant="ghost"
+          justifyContent="flex-start"
+          _hover={{ bg: hoverBg }}
+          aria-label="Módulo SGC"
+        >
+          SGC
+        </Button>
+      </VStack>
+    </Box>
   );
 }
 

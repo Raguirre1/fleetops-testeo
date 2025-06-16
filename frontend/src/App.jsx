@@ -1,56 +1,123 @@
+// App.jsx
+import {
+  ChakraProvider,
+  Box,
+  Text,
+  Button,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Flex,
+  extendTheme,
+} from "@chakra-ui/react";
 import { useState, useEffect } from "react";
 import Login from "./components/Login";
 import PurchaseRequest from "./components/PurchaseRequest";
+import AsistenciaRequest from "./components/AsistenciaRequest";
+import Controlling from "./components/Controlling";
+import SeleccionFlota from "./components/SeleccionFlota";
+import { FlotaProvider, useFlota } from "./components/FlotaContext"; // 🔹 Importamos el contexto
 
-function App() {
+const theme = extendTheme({
+  styles: {
+    global: {
+      body: {
+        bg: "gray.50",
+        color: "gray.800",
+      },
+    },
+  },
+});
+
+function AppContent() {
   const [usuario, setUsuario] = useState(null);
-  const [modulo, setModulo] = useState("");
+  const { flotaSeleccionada, setFlotaSeleccionada } = useFlota(); // 🔹 Usamos contexto
 
   const cerrarSesion = () => {
     localStorage.removeItem("usuario");
     setUsuario(null);
-    setModulo("");
+    setFlotaSeleccionada(null); // 🔹 Limpiamos también la flota global
+  };
+
+  // NUEVO: Función para cambiar flota con confirmación
+  const cambiarFlota = () => {
+    const confirmar = window.confirm(
+      "¿Seguro que quieres volver a Seleccionar la Flota?\nAsegúrate de guardar los cambios antes de continuar."
+    );
+    if (confirmar) {
+      setFlotaSeleccionada(null);
+    }
   };
 
   useEffect(() => {
-    // Ya no se carga automáticamente, obligamos al login cada vez
     setUsuario(null);
   }, []);
 
   if (!usuario) return <Login onLoginSuccess={setUsuario} />;
+  if (!flotaSeleccionada) return <SeleccionFlota onFlotaSeleccionada={setFlotaSeleccionada} />;
 
   return (
-    <div className="bg-gray-100 min-h-screen">
-      {/* Cabecera con usuario y logout */}
-      <div className="bg-blue-800 text-white p-4 flex justify-between items-center">
-        <h1 className="text-xl">Bienvenido, {usuario.nombre}</h1>
-        <div>
-          <button onClick={() => setModulo("compras")} className="mr-4">
-            Compras
-          </button>
-          <button onClick={() => setModulo("asistencias")} className="mr-4">
-            Asistencias Técnicas
-          </button>
-          <button onClick={() => setModulo("sgc")} className="mr-4">
-            SGC
-          </button>
-          <button onClick={cerrarSesion} className="bg-red-600 px-3 py-1 rounded">
-            Cerrar sesión
-          </button>
-        </div>
-      </div>
+    <Box minH="100vh" bg="gray.50">
+      <Flex
+        as="header"
+        bg="#cce5ff"
+        color="gray.800"
+        px={6}
+        py={4}
+        justify="space-between"
+        align="center"
+        shadow="sm"
+      >
+        <Text fontSize="lg" fontWeight="bold">
+          {usuario.nombre} | Flota: {flotaSeleccionada.nombre}
+        </Text>
 
-      {/* Módulos */}
-      {modulo === "compras" && (
-        <PurchaseRequest usuario={usuario} onBack={() => setModulo("")} />
-      )}
-      {modulo === "asistencias" && (
-        <div className="p-6 text-gray-700">Módulo de Asistencias Técnicas</div>
-      )}
-      {modulo === "sgc" && (
-        <div className="p-6 text-gray-700">Módulo del Sistema de Gestión de Calidad</div>
-      )}
-    </div>
+        <Flex gap={2}>
+          <Button colorScheme="yellow" onClick={cambiarFlota}>
+            Seleccionar Flota
+          </Button>
+          <Button colorScheme="red" onClick={cerrarSesion}>
+            Cerrar sesión
+          </Button>
+        </Flex>
+      </Flex>
+
+      <Tabs variant="enclosed" isFitted p={4}>
+        <TabList>
+          <Tab>🛒 Compras</Tab>
+          <Tab>🔧 Asistencias Técnicas</Tab>
+          <Tab>📊 Controlling</Tab>
+          <Tab>📁 SGC</Tab>
+        </TabList>
+
+        <TabPanels mt={4}>
+          <TabPanel>
+            <PurchaseRequest usuario={usuario} />
+          </TabPanel>
+          <TabPanel>
+            <AsistenciaRequest usuario={usuario} />
+          </TabPanel>
+          <TabPanel>
+            <Controlling />
+          </TabPanel>
+          <TabPanel>
+            <Text fontSize="lg">Módulo del Sistema de Gestión de Calidad</Text>
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    </Box>
+  );
+}
+
+function App() {
+  return (
+    <ChakraProvider theme={theme}>
+      <FlotaProvider> {/* 🔹 Envolvemos toda la app */}
+        <AppContent />
+      </FlotaProvider>
+    </ChakraProvider>
   );
 }
 

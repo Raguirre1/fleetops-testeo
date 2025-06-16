@@ -10,8 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.9",
+    "@chakra-ui/icons": "^2.2.4",
+    "@chakra-ui/react": "^2.10.9",
+    "@chakra-ui/theme": "^3.4.6",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@supabase/supabase-js": "^2.50.0",
     "axios": "^1.8.4",
+    "file-saver": "^2.0.5",
+    "framer-motion": "^12.16.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.511.0",
     "react": "^19.0.0",
