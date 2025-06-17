@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Button,
@@ -22,6 +22,19 @@ const ResetPassword = () => {
   const [updated, setUpdated] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
+
+  // ✅ Recuperar sesión desde el hash de la URL
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash) {
+      const params = new URLSearchParams(hash.replace("#", "?"));
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+      if (access_token && refresh_token) {
+        supabase.auth.setSession({ access_token, refresh_token });
+      }
+    }
+  }, []);
 
   const handleUpdatePassword = async () => {
     setError("");

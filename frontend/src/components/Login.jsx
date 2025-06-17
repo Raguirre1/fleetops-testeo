@@ -44,7 +44,6 @@ const Login = ({ onLoginSuccess }) => {
         isClosable: true,
       });
     } catch (err) {
-      console.error("Error de login:", err.message);
       setError("Credenciales incorrectas");
       toast({
         title: "Error",
@@ -93,6 +92,7 @@ const Login = ({ onLoginSuccess }) => {
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Tu correo electrónico"
+              autoComplete="email"
             />
           </FormControl>
           <FormControl id="password" mb={2} isRequired>
@@ -102,6 +102,7 @@ const Login = ({ onLoginSuccess }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Contraseña"
+              autoComplete="current-password"
             />
           </FormControl>
 

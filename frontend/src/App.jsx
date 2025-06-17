@@ -11,6 +11,7 @@ import {
   TabPanel,
   Flex,
   extendTheme,
+  useToast,
 } from "@chakra-ui/react";
 import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -23,6 +24,7 @@ import SeleccionFlota from "./components/SeleccionFlota";
 import ResetPassword from "./components/ResetPassword";
 import DashboardGeneral from "./components/DashboardGeneral";
 import { FlotaProvider, useFlota } from "./components/FlotaContext";
+import { supabase } from "./supabaseClient";
 
 const theme = extendTheme({
   styles: {
@@ -39,12 +41,24 @@ function MainApp({ usuario, setUsuario }) {
   const { flotaSeleccionada, setFlotaSeleccionada } = useFlota();
   const navigate = useNavigate();
   const [mostrarDashboard, setMostrarDashboard] = useState(true);
+  const toast = useToast();
 
-  const cerrarSesion = () => {
+  const cerrarSesion = async (mensaje = null) => {
+    await supabase.auth.signOut();
     localStorage.removeItem("usuario");
     setUsuario(null);
     setFlotaSeleccionada(null);
     navigate("/");
+
+    if (mensaje) {
+      toast({
+        title: "Sesión cerrada",
+        description: mensaje,
+        status: "info",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
   };
 
   const cambiarFlota = () => {
@@ -75,7 +89,7 @@ function MainApp({ usuario, setUsuario }) {
         shadow="sm"
       >
         <Text fontSize="lg" fontWeight="bold">
-          {usuario?.nombre || usuario?.email} | Flota: {flotaSeleccionada.nombre}
+          {usuario?.email || usuario?.nombre} | Flota: {flotaSeleccionada.nombre}
         </Text>
         <Flex gap={2}>
           <Button colorScheme="teal" onClick={() => setMostrarDashboard(true)}>
@@ -84,7 +98,7 @@ function MainApp({ usuario, setUsuario }) {
           <Button colorScheme="yellow" onClick={cambiarFlota}>
             Seleccionar Flota
           </Button>
-          <Button colorScheme="red" onClick={cerrarSesion}>
+          <Button colorScheme="red" onClick={() => cerrarSesion()}>
             Cerrar sesión
           </Button>
         </Flex>
@@ -118,10 +132,60 @@ function MainApp({ usuario, setUsuario }) {
 
 function App() {
   const [usuario, setUsuario] = useState(null);
+  const toast = useToast();
 
   useEffect(() => {
-    setUsuario(null);
+    const recuperarSesion = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUsuario(session.user);
+      } else {
+        setUsuario(null);
+      }
+    };
+    recuperarSesion();
   }, []);
+
+  // 🕒 Detectar inactividad
+  useEffect(() => {
+    let actividadReciente = Date.now();
+
+    const actualizarActividad = () => {
+      actividadReciente = Date.now();
+    };
+
+    const cerrarPorInactividad = async () => {
+      const inactivo = Date.now() - actividadReciente > 30 * 60 * 1000; // 30 min
+      if (inactivo) {
+        await supabase.auth.signOut();
+        localStorage.removeItem("usuario");
+        setUsuario(null);
+        toast({
+          title: "Sesión caducada",
+          description: "Tu sesión se ha cerrado por inactividad.",
+          status: "info",
+          duration: 6000,
+          isClosable: true,
+        });
+      }
+    };
+
+    // Eventos de actividad
+    window.addEventListener("mousemove", actualizarActividad);
+    window.addEventListener("keydown", actualizarActividad);
+    window.addEventListener("scroll", actualizarActividad);
+    window.addEventListener("click", actualizarActividad);
+
+    const intervalo = setInterval(cerrarPorInactividad, 60000); // cada minuto
+
+    return () => {
+      clearInterval(intervalo);
+      window.removeEventListener("mousemove", actualizarActividad);
+      window.removeEventListener("keydown", actualizarActividad);
+      window.removeEventListener("scroll", actualizarActividad);
+      window.removeEventListener("click", actualizarActividad);
+    };
+  }, [toast]);
 
   return (
     <ChakraProvider theme={theme}>
