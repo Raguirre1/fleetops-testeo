@@ -40,7 +40,19 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
         console.error(error);
       } else {
         setItems(data || []);
+
+        // Extraer proveedores únicos de los precios
+        const proveedoresSet = new Set();
+        (data || []).forEach(item => {
+          if (item.precios) {
+            Object.keys(item.precios).forEach(prov => {
+              proveedoresSet.add(prov);
+            });
+          }
+        });
+        setProveedores(Array.from(proveedoresSet));
       }
+
     };
     fetchItems();
   }, [numeroPedido]);
@@ -210,6 +222,16 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
     setItems(updated);
   };
 
+  const totalesProveedores = proveedores.reduce((acc, prov) => {
+  acc[prov] = items.reduce((sum, item) => {
+    const precioUnit = item.precios?.[prov] || 0;
+    const cantidad = item.cantidad || 0;
+    return sum + precioUnit * cantidad;
+  }, 0);
+  return acc;
+}, {});
+
+
   return (
     <Box p={6} maxW="100%">
       <Text fontSize="xl" fontWeight="bold" mb={4}>Línea de Pedidos</Text>
@@ -278,53 +300,67 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
               <Th>Acciones</Th>
             </Tr>
           </Thead>
-          <Tbody>
-            {items.length === 0 ? (
-              <Tr>
-                <Td colSpan={6 + proveedores.length * 2} textAlign="center" py={4}>
-                  No hay ítems cargados.
-                </Td>
-              </Tr>
-            ) : (
-              items.map((item, index) => (
-                <Tr key={index}>
-                  <Td>{item.item}</Td>
-                  <Td>
-                    <Input value={item.descripcion} onChange={(e) => handleChange(index, "descripcion", e.target.value)} />
-                  </Td>
-                  <Td>
-                    <Input value={item.referencia} onChange={(e) => handleChange(index, "referencia", e.target.value)} />
-                  </Td>
-                  <Td>
-                    <Input type="number" value={item.cantidad} onChange={(e) => handleChange(index, "cantidad", parseInt(e.target.value) || 0)} />
-                  </Td>
-                  <Td>
-                    <Input value={item.unidad} onChange={(e) => handleChange(index, "unidad", e.target.value)} />
-                  </Td>
-                  {proveedores.map((prov) => {
-                    const precioUnit = item.precios?.[prov] || 0;
-                    const total = precioUnit * (item.cantidad || 0);
-                    return (
-                      <React.Fragment key={prov}>
-                        <Td>
-                          <Input
-                            type="number"
-                            value={precioUnit}
-                            onChange={(e) => handleProveedorChange(index, prov, e.target.value)}
-                          />
-                        </Td>
-                        <Td>
-                          <Text>{isNaN(total) ? "-" : total.toFixed(2)} €</Text>
-                        </Td>
-                      </React.Fragment>
-                    );
-                  })}
-                  <Td>
-                    <Button size="sm" colorScheme="red" onClick={() => handleRemove(index)}>Eliminar</Button>
+            <Tbody>
+              {items.length === 0 ? (
+                <Tr>
+                  <Td colSpan={6 + proveedores.length * 2} textAlign="center" py={4}>
+                    No hay ítems cargados.
                   </Td>
                 </Tr>
-              ))
-            )}
+              ) : (
+                <>
+                  {items.map((item, index) => (
+                    <Tr key={index}>
+                      <Td>{item.item}</Td>
+                      <Td>
+                        <Input value={item.descripcion} onChange={(e) => handleChange(index, "descripcion", e.target.value)} />
+                      </Td>
+                      <Td>
+                        <Input value={item.referencia} onChange={(e) => handleChange(index, "referencia", e.target.value)} />
+                      </Td>
+                      <Td>
+                        <Input type="number" value={item.cantidad} onChange={(e) => handleChange(index, "cantidad", parseInt(e.target.value) || 0)} />
+                      </Td>
+                      <Td>
+                        <Input value={item.unidad} onChange={(e) => handleChange(index, "unidad", e.target.value)} />
+                      </Td>
+                      {proveedores.map((prov) => {
+                        const precioUnit = item.precios?.[prov] || 0;
+                        const total = precioUnit * (item.cantidad || 0);
+                        return (
+                          <React.Fragment key={prov}>
+                            <Td>
+                              <Input
+                                type="number"
+                                value={precioUnit}
+                                onChange={(e) => handleProveedorChange(index, prov, e.target.value)}
+                              />
+                            </Td>
+                            <Td>
+                              <Text>{isNaN(total) ? "-" : total.toFixed(2)} €</Text>
+                            </Td>
+                          </React.Fragment>
+                        );
+                      })}
+                      <Td>
+                        <Button size="sm" colorScheme="red" onClick={() => handleRemove(index)}>Eliminar</Button>
+                      </Td>
+                    </Tr>
+                  ))}
+
+                  {/* Fila de totales */}
+                  <Tr fontWeight="bold" bg="gray.100">
+                    <Td colSpan={5} textAlign="right">Total</Td>
+                    {proveedores.map((prov) => (
+                      <React.Fragment key={"total-" + prov}>
+                        <Td>{totalesProveedores[prov].toFixed(2)} €</Td>
+                        <Td></Td>
+                      </React.Fragment>
+                    ))}
+                    <Td></Td>
+                  </Tr>
+                </>
+              )}
           </Tbody>
         </Table>
       </Box>
