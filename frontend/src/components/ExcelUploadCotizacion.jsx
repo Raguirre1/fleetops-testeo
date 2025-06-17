@@ -150,9 +150,15 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
   };
 
   const handleAddProveedor = () => {
-    const nuevoProveedor = `Proveedor ${proveedores.length + 1}`;
-    setProveedores([...proveedores, nuevoProveedor]);
+    const nombreManual = prompt("Introduce el nombre del nuevo proveedor:");
+    if (!nombreManual) return;
+    if (proveedores.includes(nombreManual)) {
+      toast({ title: "Ese proveedor ya existe", status: "warning" });
+      return;
+    }
+    setProveedores([...proveedores, nombreManual]);
   };
+
 
   const handleRemoveProveedor = (nombreProveedor) => {
     const nuevosProveedores = proveedores.filter((p) => p !== nombreProveedor);
