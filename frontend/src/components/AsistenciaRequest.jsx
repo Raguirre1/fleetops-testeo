@@ -28,6 +28,7 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import AsistenciaArchivadas from "./AsistenciaArchivadas";
 import { useFlota } from "./FlotaContext"; // ✅ nuevo
+import { obtenerNombreDesdeEmail } from "./EmailUsuarios";
 
 const AsistenciaRequest = ({ usuario, onBack }) => {
   const { buques } = useFlota(); // ✅ nuevo
@@ -135,7 +136,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       fecha_solicitud: formulario.fechaSolicitud || null,
       numero_cuenta: formulario.numeroCuenta,
       buque: buqueSeleccionado,
-      usuario: usuario.nombre,
+      usuario: obtenerNombreDesdeEmail(usuario?.email),
     };
     let error;
     if (editarId) {
@@ -320,103 +321,108 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
 
       <Flex justify="space-between" align="center" mb={3}>
         <Heading size="md">📋 Asistencias registradas</Heading>
-          <Flex gap={2} align="center" flexWrap="nowrap">
-            <Input
-              placeholder="Buscar asistencia o título"
-              value={filtro}
-              onChange={(e) => setFiltro(e.target.value)}
-              size="sm"
-              maxW="200px"
-            />
-            <Button
-              onClick={exportarAExcel}
-              colorScheme="blue"
-              size="sm"
-              leftIcon={<span>📥</span>}
-              whiteSpace="nowrap"
-            >
-              Exportar a Excel
-            </Button>
-            <Button
-              onClick={() => setMostrarArchivadas(true)}
-              colorScheme="purple"
-              size="sm"
-              rightIcon={<span>📦</span>}
-              whiteSpace="nowrap"
-            >
-              Ver asistencias archivados
-            </Button>
-          </Flex>
+        <Flex gap={2} align="center" flexWrap="nowrap">
+          <Input
+            placeholder="Buscar asistencia o título"
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            size="sm"
+            maxW="200px"
+          />
+          <Button
+            onClick={exportarAExcel}
+            colorScheme="blue"
+            size="sm"
+            leftIcon={<span>📥</span>}
+            whiteSpace="nowrap"
+          >
+            Exportar a Excel
+          </Button>
+          <Button
+            onClick={() => setMostrarArchivadas(true)}
+            colorScheme="purple"
+            size="sm"
+            rightIcon={<span>📦</span>}
+            whiteSpace="nowrap"
+          >
+            Ver asistencias archivados
+          </Button>
         </Flex>
-      <Table variant="striped" size="sm">
-        <Thead>
-          <Tr>
-            {[
-              ["Nº Asistencia", "numero_ate"],
-              ["Título", "titulo_ate"],
-              ["Urgencia", "urgencia"],
-              ["Fecha", "fecha_solicitud"],
-              ["Solicitante", "usuario"],
-              ["Estado", "estado"],
-              ["Fecha estado", "fecha_estado"],
-              ["Cuenta", "numero_cuenta"],
-              ["Estado de Pago", "estado_pago"],
-              ["Factura", "estado_factura"],
-            ].map(([label, campo]) => (
-              <Th key={campo} onClick={() => ordenarPorCampo(campo)} cursor="pointer">
-                {label} {ordenCampo === campo ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
-              </Th>
-            ))}
-            <Th>Acciones</Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {solicitudesFiltradas.map((s, idx) => (
-            <Tr key={idx}>
-              <Td fontWeight="bold">{s.numero_ate}</Td>
-              <Td>{s.titulo_ate}</Td>
-              <Td>{s.urgencia}</Td>
-              <Td>{s.fecha_solicitud?.split("T")[0]}</Td>
-              <Td>{s.usuario}</Td>
-              <Td>{s.estado === "Pedido Activo" ? "Pedido Activo ✅" : s.estado || "En Consulta"}</Td>
-              <Td>{s.fecha_estado?.split("T")[0] || "-"}</Td>
-              <Td>{s.numero_cuenta || "-"}</Td>
-              <Td>{estadosPago[s.numero_ate] || "-"}</Td>
-              <Td>
-                {estadoFactura[s.numero_ate] ? (
-                  <Tooltip label="Falta cargar la factura final" hasArrow>
-                    <span>🟡</span>
-                  </Tooltip>
-                ) : (
-                  "✅"
-                )}
-              </Td>
-              <Td>
-                <Flex gap={1} justify="center">
-                  <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
-                  <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
-                  <Button size="xs" onClick={() => handleEliminar(s.numero_ate)}>🗑️</Button>
-                  <Tooltip label="Archivar Asistencia" hasArrow>
-                    <Button size="xs" onClick={() => archivarAsistencia(s.numero_ate)}>📦</Button>
-                  </Tooltip>
-                  <Menu>
-                    <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
-                    <MenuList>
-                      {["En Consulta", "Emitida", "Cancelada", "Realizada"].map((estado) => (
-                        <MenuItem key={estado} onClick={() => actualizarEstado(s.numero_ate, estado)}>
-                          {estado}
-                        </MenuItem>
-                      ))}
-                    </MenuList>
-                  </Menu>
-                </Flex>
-              </Td>
+      </Flex>
+
+      {/* SCROLL + STICKY HEADER APLICADO */}
+      <Box maxHeight="500px" overflowY="auto" border="1px solid #E2E8F0" borderRadius="md">
+        <Table variant="striped" size="sm">
+          <Thead position="sticky" top={0} zIndex={1} bg="gray.100">
+            <Tr>
+              {[
+                ["Nº Asistencia", "numero_ate"],
+                ["Título", "titulo_ate"],
+                ["Urgencia", "urgencia"],
+                ["Fecha", "fecha_solicitud"],
+                ["Solicitante", "usuario"],
+                ["Estado", "estado"],
+                ["Fecha estado", "fecha_estado"],
+                ["Cuenta", "numero_cuenta"],
+                ["Estado de Pago", "estado_pago"],
+                ["Factura", "estado_factura"],
+              ].map(([label, campo]) => (
+                <Th key={campo} onClick={() => ordenarPorCampo(campo)} cursor="pointer">
+                  {label} {ordenCampo === campo ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+                </Th>
+              ))}
+              <Th>Acciones</Th>
             </Tr>
-          ))}
-        </Tbody>
-      </Table>
+          </Thead>
+          <Tbody>
+            {solicitudesFiltradas.map((s, idx) => (
+              <Tr key={idx}>
+                <Td fontWeight="bold">{s.numero_ate}</Td>
+                <Td>{s.titulo_ate}</Td>
+                <Td>{s.urgencia}</Td>
+                <Td>{s.fecha_solicitud?.split("T")[0]}</Td>
+                <Td>{s.usuario}</Td>
+                <Td>{s.estado === "Pedido Activo" ? "Pedido Activo ✅" : s.estado || "En Consulta"}</Td>
+                <Td>{s.fecha_estado?.split("T")[0] || "-"}</Td>
+                <Td>{s.numero_cuenta || "-"}</Td>
+                <Td>{estadosPago[s.numero_ate] || "-"}</Td>
+                <Td>
+                  {estadoFactura[s.numero_ate] ? (
+                    <Tooltip label="Falta cargar la factura final" hasArrow>
+                      <span>🟡</span>
+                    </Tooltip>
+                  ) : (
+                    "✅"
+                  )}
+                </Td>
+                <Td>
+                  <Flex gap={1} justify="center">
+                    <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
+                    <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
+                    <Button size="xs" onClick={() => handleEliminar(s.numero_ate)}>🗑️</Button>
+                    <Tooltip label="Archivar Asistencia" hasArrow>
+                      <Button size="xs" onClick={() => archivarAsistencia(s.numero_ate)}>📦</Button>
+                    </Tooltip>
+                    <Menu>
+                      <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
+                      <MenuList>
+                        {["En Consulta", "Emitida", "Cancelada", "Realizada"].map((estado) => (
+                          <MenuItem key={estado} onClick={() => actualizarEstado(s.numero_ate, estado)}>
+                            {estado}
+                          </MenuItem>
+                        ))}
+                      </MenuList>
+                    </Menu>
+                  </Flex>
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </Box>
     </Box>
   );
+
 };
 
 export default AsistenciaRequest;

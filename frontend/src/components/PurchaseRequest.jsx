@@ -28,6 +28,7 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import PedidosArchivados from "./PedidosArchivados";
 import { useFlota } from "./FlotaContext"; // 🔄 MODIFICADO
+import { obtenerNombreDesdeEmail } from "./EmailUsuarios";
 
 const PurchaseRequest = ({ usuario, onBack }) => {
   const { buques } = useFlota(); // 🔄 MODIFICADO
@@ -131,7 +132,7 @@ const PurchaseRequest = ({ usuario, onBack }) => {
       fecha_entrega: formulario.fechaEntrega || null,
       numero_cuenta: formulario.numeroCuenta,
       buque: buqueSeleccionado,
-      usuario: usuario.nombre,
+      usuario: obtenerNombreDesdeEmail(usuario?.email),
     };
     let error;
     if (editarId) {
@@ -357,77 +358,79 @@ const PurchaseRequest = ({ usuario, onBack }) => {
         </Flex>
       </Flex>
 
-      <Table variant="striped" size="sm">
-        <Thead>
-          <Tr>
-            {[
-              ["Nº Pedido", "numero_pedido"],
-              ["Título", "titulo_pedido"],
-              ["Urgencia", "urgencia"],
-              ["Fecha", "fecha_pedido"],
-              ["Fecha Límite", "fecha_entrega"],
-              ["Solicitante", "usuario"],
-              ["Estado", "estado"],
-              ["Fecha estado", "fecha_estado"],
-              ["Cuenta", "numero_cuenta"],
-              ["Estado de Pago", "estado_pago"],
-              ["Factura", "estado_factura"],
-            ].map(([label, campo]) => (
-              <Th key={campo} onClick={() => ordenarPorCampo(campo)} cursor="pointer">
-                {label} {ordenCampo === campo ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
-              </Th>
-            ))}
-            <Th>Acciones</Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {solicitudesFiltradas.map((s, idx) => (
-            <Tr key={idx}>
-              <Td fontWeight="bold">{s.numero_pedido}</Td>
-              <Td>{s.titulo_pedido}</Td>
-              <Td>{s.urgencia}</Td>
-              <Td>{s.fecha_pedido?.split("T")[0]}</Td>
-              <Td>{s.fecha_entrega?.split("T")[0] || "-"}</Td>
-              <Td>{s.usuario}</Td>
-              <Td>{s.estado === "Pedido Activo" ? "Pedido Activo ✅" : s.estado || "Solicitud de Compra"}</Td>
-              <Td>{s.fecha_estado?.split("T")[0] || "-"}</Td>
-              <Td>{s.numero_cuenta || "-"}</Td>
-              <Td>{estadosPago[s.numero_pedido] || "-"}</Td>
-              <Td>
-                {estadoFactura[s.numero_pedido] ? (
-                  <Tooltip label="Falta cargar la factura final" hasArrow>
-                    <span>🟡</span>
-                  </Tooltip>
-                ) : (
-                  "✅"
-                )}
-              </Td>
-              <Td>
-                <Flex gap={1} justify="center">
-                  <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
-                  <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
-                  <Button size="xs" onClick={() => handleEliminar(s.numero_pedido)}>🗑️</Button>
-                  <Tooltip label="Archivar pedido" hasArrow>
-                    <Button size="xs" onClick={() => archivarPedido(s.numero_pedido)}>📦</Button>
-                  </Tooltip>
-                  <Menu>
-                    <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
-                    <MenuList>
-                      {["Solicitud de Compra", "En Consulta", "Pedido Activo", "Recibido"].map((estado) => (
-                        <MenuItem key={estado} onClick={() => actualizarEstado(s.numero_pedido, estado)}>
-                          {estado}
-                        </MenuItem>
-                      ))}
-                    </MenuList>
-                  </Menu>
-                </Flex>
-              </Td>
+      {/* CORREGIDO: Aquí comienza el Box que envuelve la tabla */}
+      <Box maxHeight="500px" overflowY="auto" border="1px solid #E2E8F0" borderRadius="md">
+        <Table variant="striped" size="sm">
+          <Thead position="sticky" top={0} zIndex={1} bg="gray.100">
+            <Tr>
+              {[
+                ["Nº Pedido", "numero_pedido"],
+                ["Título", "titulo_pedido"],
+                ["Urgencia", "urgencia"],
+                ["Fecha", "fecha_pedido"],
+                ["Fecha Límite", "fecha_entrega"],
+                ["Solicitante", "usuario"],
+                ["Estado", "estado"],
+                ["Fecha estado", "fecha_estado"],
+                ["Cuenta", "numero_cuenta"],
+                ["Estado de Pago", "estado_pago"],
+                ["Factura", "estado_factura"],
+              ].map(([label, campo]) => (
+                <Th key={campo} onClick={() => ordenarPorCampo(campo)} cursor="pointer">
+                  {label} {ordenCampo === campo ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+                </Th>
+              ))}
+              <Th>Acciones</Th>
             </Tr>
-          ))}
-        </Tbody>
+          </Thead>
+          <Tbody>
+            {solicitudesFiltradas.map((s, idx) => (
+              <Tr key={idx}>
+                <Td fontWeight="bold">{s.numero_pedido}</Td>
+                <Td>{s.titulo_pedido}</Td>
+                <Td>{s.urgencia}</Td>
+                <Td>{s.fecha_pedido?.split("T")[0]}</Td>
+                <Td>{s.fecha_entrega?.split("T")[0] || "-"}</Td>
+                <Td>{s.usuario}</Td>
+                <Td>{s.estado === "Pedido Activo" ? "Pedido Activo ✅" : s.estado || "Solicitud de Compra"}</Td>
+                <Td>{s.fecha_estado?.split("T")[0] || "-"}</Td>
+                <Td>{s.numero_cuenta || "-"}</Td>
+                <Td>{estadosPago[s.numero_pedido] || "-"}</Td>
+                <Td>
+                  {estadoFactura[s.numero_pedido] ? (
+                    <Tooltip label="Falta cargar la factura final" hasArrow>
+                      <span>🟡</span>
+                    </Tooltip>
+                  ) : (
+                    "✅"
+                  )}
+                </Td>
+                <Td>
+                  <Flex gap={1} justify="center">
+                    <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
+                    <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
+                    <Button size="xs" onClick={() => handleEliminar(s.numero_pedido)}>🗑️</Button>
+                    <Tooltip label="Archivar pedido" hasArrow>
+                      <Button size="xs" onClick={() => archivarPedido(s.numero_pedido)}>📦</Button>
+                    </Tooltip>
+                    <Menu>
+                      <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
+                      <MenuList>
+                        {["Solicitud de Compra", "En Consulta", "Pedido Activo", "Recibido"].map((estado) => (
+                          <MenuItem key={estado} onClick={() => actualizarEstado(s.numero_pedido, estado)}>
+                            {estado}
+                          </MenuItem>
+                        ))}
+                      </MenuList>
+                    </Menu>
+                  </Flex>
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
         </Table>
-        </Box>
-        );
-        };
-
+      </Box>
+    </Box>
+  );
+  }
         export default PurchaseRequest;

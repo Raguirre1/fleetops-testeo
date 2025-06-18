@@ -25,6 +25,7 @@ import ResetPassword from "./components/ResetPassword";
 import DashboardGeneral from "./components/DashboardGeneral";
 import { FlotaProvider, useFlota } from "./components/FlotaContext";
 import { supabase } from "./supabaseClient";
+import { obtenerNombreDesdeEmail } from "./components/EmailUsuarios";
 
 const theme = extendTheme({
   styles: {
@@ -89,7 +90,7 @@ function MainApp({ usuario, setUsuario }) {
         shadow="sm"
       >
         <Text fontSize="lg" fontWeight="bold">
-          {usuario?.email || usuario?.nombre} | Flota: {flotaSeleccionada.nombre}
+          {obtenerNombreDesdeEmail(usuario?.email)} | Flota: {flotaSeleccionada.nombre}
         </Text>
         <Flex gap={2}>
           <Button colorScheme="teal" onClick={() => setMostrarDashboard(true)}>
