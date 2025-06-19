@@ -12,7 +12,8 @@ import {
   Text,
 } from "@chakra-ui/react";
 
-const DetalleProvisionEnviada = ({ envio, onBack }) => {
+// Recibe también buquesDict como prop
+const DetalleProvisionEnviada = ({ envio, buquesDict = {}, onBack }) => {
   const { resumen, detalles, mes, anio } = envio;
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null);
   const [ordenCampoResumen, setOrdenCampoResumen] = useState("buque");
@@ -63,9 +64,12 @@ const DetalleProvisionEnviada = ({ envio, onBack }) => {
     }
   };
 
+  // Ordenar usando nombre si existe en el diccionario
   const buquesOrdenados = Object.entries(resumenParseado).sort(([buqueA], [buqueB]) => {
-    if (buqueA < buqueB) return ordenResumenAsc ? -1 : 1;
-    if (buqueA > buqueB) return ordenResumenAsc ? 1 : -1;
+    const nombreA = buquesDict[buqueA] || buqueA;
+    const nombreB = buquesDict[buqueB] || buqueB;
+    if (nombreA < nombreB) return ordenResumenAsc ? -1 : 1;
+    if (nombreA > nombreB) return ordenResumenAsc ? 1 : -1;
     return 0;
   });
 
@@ -92,9 +96,11 @@ const DetalleProvisionEnviada = ({ envio, onBack }) => {
             <Tbody>
               {buquesOrdenados.map(([buque, fila]) => {
                 let total = 0;
+                // Usar nombre de buque si existe en el diccionario
+                const nombreBuque = buquesDict[buque] || buque;
                 return (
                   <Tr key={buque}>
-                    <Td fontWeight="bold">{buque}</Td>
+                    <Td fontWeight="bold">{nombreBuque}</Td>
                     {cuentas.map((cuenta) => {
                       const valor = fila[cuenta] || 0;
                       total += valor;
@@ -129,7 +135,7 @@ const DetalleProvisionEnviada = ({ envio, onBack }) => {
       ) : (
         <Box>
           <Heading size="md" mt={6} mb={2}>
-            Proveedores para {cuentaSeleccionada.buque} - {cuentaSeleccionada.cuenta}
+            Proveedores para {(buquesDict[cuentaSeleccionada.buque] || cuentaSeleccionada.buque)} - {cuentaSeleccionada.cuenta}
           </Heading>
           <Button onClick={() => setCuentaSeleccionada(null)} colorScheme="gray" mb={4}>
             ⬅ Volver al Resumen

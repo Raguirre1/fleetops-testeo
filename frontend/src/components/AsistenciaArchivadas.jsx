@@ -80,7 +80,6 @@ const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
           <Tr>
             <Th>Nº Asistencia</Th>
             <Th>Título</Th>
-            <Th>Buque</Th>
             <Th>Usuario</Th>
             <Th>Estado</Th>
             <Th>Factura</Th>
@@ -91,8 +90,7 @@ const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
           {asistencias.map((a) => (
             <Tr key={a.numero_ate}>
               <Td fontWeight="bold">{a.numero_ate}</Td>
-              <Td>{a.titulo_asistencia}</Td>
-              <Td>{a.buque}</Td>
+              <Td>{a.titulo_ate}</Td>
               <Td>{a.usuario}</Td>
               <Td>{a.estado || "-"}</Td>
               <Td>

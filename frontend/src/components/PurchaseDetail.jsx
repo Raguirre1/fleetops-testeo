@@ -32,6 +32,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const toast = useToast();
+  const [nombreBuque, setNombreBuque] = useState("");
 
   const loadArchivosSubidos = async () => {
     const folderPath = `${pedido.numeroPedido}/documentos/`;
@@ -58,6 +59,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
     const loadData = async () => {
       try {
         setIsLoading(true);
+        // Cargar comentarios y info adicional
         const { data, error } = await supabase
           .from("purchase_details")
           .select("comentarios, infoadicional")
@@ -71,6 +73,22 @@ const PurchaseDetail = ({ pedido, volver }) => {
           setInfoadicional(data.infoadicional || "");
         }
 
+        // Cargar nombre de buque usando buque_id
+        if (pedido.buque_id) {
+          const { data: buqueData, error: buqueError } = await supabase
+            .from("buques")
+            .select("nombre")
+            .eq("id", pedido.buque_id)
+            .maybeSingle();
+          if (!buqueError && buqueData && buqueData.nombre) {
+            setNombreBuque(buqueData.nombre);
+          } else {
+            setNombreBuque("—");
+          }
+        } else {
+          setNombreBuque("—");
+        }
+
         await loadArchivosSubidos();
       } catch (err) {
         setError("Error al cargar los datos. Revisa la consola para más detalles.");
@@ -81,7 +99,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
     };
 
     loadData();
-  }, [pedido.numeroPedido]);
+  }, [pedido.numeroPedido, pedido.buque_id]);
 
   const handleSaveToSupabase = async () => {
     try {
@@ -191,7 +209,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
         <Heading size="md" color="blue.600" mb={2}>📦 Detalle del Pedido</Heading>
         <Text><strong>Nº Pedido:</strong> {pedido.numeroPedido}</Text>
         <Text><strong>Título:</strong> {pedido.tituloPedido || "—"}</Text>
-        <Text><strong>Buque:</strong> {pedido.buque || "—"}</Text>
+        <Text><strong>Buque:</strong> {nombreBuque || "—"}</Text>
         <Text><strong>Solicitante:</strong> {pedido.usuario || "—"}</Text>
         <Text><strong>Urgencia:</strong> {pedido.urgencia || "—"}</Text>
         <Text><strong>Fecha de pedido:</strong> {pedido.fechaPedido || "—"}</Text>

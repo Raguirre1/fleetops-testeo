@@ -21,15 +21,8 @@ import { supabase } from "../supabaseClient";
 import PresupuestoFijo from "./PresupuestoFijo";
 
 const cuentas = [
-  "Casco",
-  "Máquinas",
-  "Electricidad",
-  "Electrónicas",
-  "SEP",
-  "Fonda",
-  "MLC",
-  "Aceite",
-  "Inversiones",
+  "Casco", "Máquinas", "Electricidad", "Electrónicas",
+  "SEP", "Fonda", "MLC", "Aceite", "Inversiones",
 ];
 
 const meses = [
@@ -37,7 +30,7 @@ const meses = [
   "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"
 ];
 
-const PresupuestoMensual = ({ anio, buque, onVolver }) => {
+const PresupuestoMensual = ({ anio, buque, buqueNombre, onVolver }) => {
   const [datos, setDatos] = useState({});
   const [cargando, setCargando] = useState(true);
   const [refrescarFijo, setRefrescarFijo] = useState(false);
@@ -49,7 +42,7 @@ const PresupuestoMensual = ({ anio, buque, onVolver }) => {
         .from("presupuesto_mensual")
         .select("*")
         .eq("anio", anio)
-        .eq("buque", buque);
+        .eq("buque_id", buque); // 👈 El ID, no el nombre
 
       const estructura = {};
       cuentas.forEach((cuenta) => {
@@ -67,7 +60,7 @@ const PresupuestoMensual = ({ anio, buque, onVolver }) => {
     };
 
     cargarDatos();
-  }, [anio, buque]);
+  }, [anio, buque, refrescarFijo]);
 
   const handleChange = (cuenta, mes, valor) => {
     setDatos((prev) => ({
@@ -81,17 +74,16 @@ const PresupuestoMensual = ({ anio, buque, onVolver }) => {
 
   const guardar = async () => {
     const registros = [];
-
     cuentas.forEach((cuenta) => {
       meses.forEach((mes) => {
         const valor = parseFloat(datos[cuenta][mes]) || 0;
-        registros.push({ anio, buque, cuenta, mes, valor });
+        registros.push({ anio, buque_id: buque, cuenta, mes, valor });
       });
     });
 
     const { error } = await supabase
       .from("presupuesto_mensual")
-      .upsert(registros, { onConflict: ["anio", "buque", "cuenta", "mes"] });
+      .upsert(registros, { onConflict: ["anio", "buque_id", "cuenta", "mes"] });
 
     if (error) {
       toast({
@@ -113,7 +105,6 @@ const PresupuestoMensual = ({ anio, buque, onVolver }) => {
 
   const exportarExcel = () => {
     const datosExcel = [];
-
     cuentas.forEach((cuenta) => {
       const fila = { Cuenta: cuenta };
       meses.forEach((mes) => {
@@ -122,12 +113,15 @@ const PresupuestoMensual = ({ anio, buque, onVolver }) => {
       datosExcel.push(fila);
     });
 
+    // Usa el nombre del buque si está disponible, si no el id
+    const nombreParaExcel = buqueNombre || buque;
+
     const ws = XLSX.utils.json_to_sheet(datosExcel);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `${buque}_${anio}`);
+    XLSX.utils.book_append_sheet(wb, ws, `${nombreParaExcel}_${anio}`);
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([buffer], { type: "application/octet-stream" });
-    saveAs(blob, `PresupuestoMensual_${buque}_${anio}.xlsx`);
+    saveAs(blob, `PresupuestoMensual_${nombreParaExcel}_${anio}.xlsx`);
   };
 
   const totalPorCuenta = (cuenta) =>
@@ -157,7 +151,7 @@ const PresupuestoMensual = ({ anio, buque, onVolver }) => {
     return (
       <Box p={8}>
         <Heading size="md" mb={4}>
-          Cargando presupuesto mensual de {buque} ({anio})...
+          Cargando presupuesto mensual de {buqueNombre || buque} ({anio})...
         </Heading>
         <Spinner size="lg" color="teal.500" />
       </Box>
@@ -167,7 +161,9 @@ const PresupuestoMensual = ({ anio, buque, onVolver }) => {
   return (
     <Box>
       <HStack justify="space-between" mb={4}>
-        <Heading size="md">📅 Presupuesto mensual - {buque} ({anio})</Heading>
+        <Heading size="md">
+          📅 Presupuesto mensual - {buqueNombre || buque} ({anio})
+        </Heading>
         <Button onClick={onVolver} colorScheme="gray">
           ← Volver al resumen
         </Button>

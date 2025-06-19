@@ -19,17 +19,15 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import ProvisionesDetalle from "./ProvisionesDetalle";
 import ProvisionesEnviadas from "./ProvisionesEnviadas";
-import { useFlota } from "./FlotaContext"; // 🔄 Importamos contexto
+import { useFlota } from "./FlotaContext"; // Importamos contexto
 
 const cuentas = [
   "Casco", "Máquinas", "Electricidad", "Electrónicas",
   "SEP", "Fonda", "MLC", "Aceite",
 ];
 
-// Eliminamos la constante estática ordenBuques
-
 const Provisiones = () => {
-  const { buques } = useFlota(); // 🔄 Usamos buques dinámicos
+  const { buques } = useFlota(); // buques = [{id, nombre}]
   const [resumen, setResumen] = useState({});
   const [detalles, setDetalles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,9 +39,10 @@ const Provisiones = () => {
   const cargarResumen = async () => {
     setLoading(true);
 
+    // Cambiado: seleccionamos buque_id y no buque por nombre
     const { data: pedidos, error: errorPedidos } = await supabase
       .from("solicitudes_compra")
-      .select("numero_pedido, buque, numero_cuenta, estado")
+      .select("numero_pedido, buque_id, numero_cuenta, estado")
       .in("estado", ["Pedido Activo", "Recibido"]);
 
     const { data: cotizaciones, error: errorCot } = await supabase
@@ -52,7 +51,7 @@ const Provisiones = () => {
 
     const { data: asistencias, error: errorAsist } = await supabase
       .from("solicitudes_asistencia")
-      .select("numero_ate, buque, numero_cuenta");
+      .select("numero_ate, buque_id, numero_cuenta");
 
     const { data: cotizacionesAsistencia, error: errorCotAsist } = await supabase
       .from("asistencias_proveedor")
@@ -77,7 +76,7 @@ const Provisiones = () => {
 
       cotAprobadas.forEach((c) => {
         detallesTemp.push({
-          buque: pedido.buque,
+          buque_id: pedido.buque_id, // Cambiado a buque_id
           numero_pedido: pedido.numero_pedido,
           proveedor: c.proveedor,
           cuenta: pedido.numero_cuenta || "Sin cuenta",
@@ -90,9 +89,9 @@ const Provisiones = () => {
         0
       );
 
-      if (!resumenTemp[pedido.buque]) resumenTemp[pedido.buque] = {};
+      if (!resumenTemp[pedido.buque_id]) resumenTemp[pedido.buque_id] = {};
       const cuenta = pedido.numero_cuenta || "Sin cuenta";
-      resumenTemp[pedido.buque][cuenta] = (resumenTemp[pedido.buque][cuenta] || 0) + suma;
+      resumenTemp[pedido.buque_id][cuenta] = (resumenTemp[pedido.buque_id][cuenta] || 0) + suma;
     });
 
     asistencias.forEach((asistencia) => {
@@ -105,7 +104,7 @@ const Provisiones = () => {
 
       cotAprobadas.forEach((c) => {
         detallesTemp.push({
-          buque: asistencia.buque,
+          buque_id: asistencia.buque_id, // Cambiado a buque_id
           numero_pedido: asistencia.numero_ate,
           proveedor: c.proveedor,
           cuenta: asistencia.numero_cuenta || "Sin cuenta",
@@ -118,9 +117,9 @@ const Provisiones = () => {
         0
       );
 
-      if (!resumenTemp[asistencia.buque]) resumenTemp[asistencia.buque] = {};
+      if (!resumenTemp[asistencia.buque_id]) resumenTemp[asistencia.buque_id] = {};
       const cuenta = asistencia.numero_cuenta || "Sin cuenta";
-      resumenTemp[asistencia.buque][cuenta] = (resumenTemp[asistencia.buque][cuenta] || 0) + suma;
+      resumenTemp[asistencia.buque_id][cuenta] = (resumenTemp[asistencia.buque_id][cuenta] || 0) + suma;
     });
 
     setResumen(resumenTemp);
@@ -130,19 +129,24 @@ const Provisiones = () => {
 
   useEffect(() => {
     cargarResumen();
+    // eslint-disable-next-line
   }, [refrescar]);
 
   if (!buques || buques.length === 0) return null; // Espera a cargar los buques
+
+  // Genera diccionario {id: nombre} para lookup rápido
+  const buquesDict = Object.fromEntries(buques.map(b => [b.id, b.nombre]));
 
   const totalPorCuenta = {};
   const totalPorBuque = {};
   let totalGeneral = 0;
 
+  // Recorrer por buque_id, pero mostrar nombre
   buques.forEach((buque) => {
-    totalPorBuque[buque] = 0;
+    totalPorBuque[buque.id] = 0;
     cuentas.forEach((cuenta) => {
-      const valor = resumen[buque]?.[cuenta] || 0;
-      totalPorBuque[buque] += valor;
+      const valor = resumen[buque.id]?.[cuenta] || 0;
+      totalPorBuque[buque.id] += valor;
       totalPorCuenta[cuenta] = (totalPorCuenta[cuenta] || 0) + valor;
       totalGeneral += valor;
     });
@@ -151,11 +155,11 @@ const Provisiones = () => {
   const exportarResumenExcel = () => {
     const filas = [];
     buques.forEach((buque) => {
-      const fila = { Buque: buque };
+      const fila = { Buque: buque.nombre };
       cuentas.forEach((cuenta) => {
-        fila[cuenta] = resumen[buque]?.[cuenta] || 0;
+        fila[cuenta] = resumen[buque.id]?.[cuenta] || 0;
       });
-      fila["Total"] = totalPorBuque[buque];
+      fila["Total"] = totalPorBuque[buque.id];
       filas.push(fila);
     });
 
@@ -209,9 +213,12 @@ const Provisiones = () => {
   };
 
   if (vistaDetalle) {
+    const buqueObj = buques.find(b => b.id === vistaDetalle.buque);
+    const buqueNombre = buqueObj ? buqueObj.nombre : vistaDetalle.buque;
     return (
       <ProvisionesDetalle
         buque={vistaDetalle.buque}
+        buqueNombre={buqueNombre}       
         cuenta={vistaDetalle.cuenta}
         onBack={() => {
           setVistaDetalle(null);
@@ -258,10 +265,10 @@ const Provisiones = () => {
             </Thead>
             <Tbody>
               {buques.map((buque) => (
-                <Tr key={buque}>
-                  <Td fontWeight="bold">{buque}</Td>
+                <Tr key={buque.id}>
+                  <Td fontWeight="bold">{buque.nombre}</Td>
                   {cuentas.map((cuenta) => {
-                    const valor = resumen[buque]?.[cuenta] || 0;
+                    const valor = resumen[buque.id]?.[cuenta] || 0;
                     return (
                       <Td
                         key={cuenta}
@@ -269,7 +276,7 @@ const Provisiones = () => {
                         _hover={{ bg: "gray.100", cursor: "pointer" }}
                         onClick={() =>
                           valor > 0 &&
-                          setVistaDetalle({ buque: buque, cuenta: cuenta })
+                          setVistaDetalle({ buque: buque.id, cuenta: cuenta })
                         }
                       >
                         {valor > 0
@@ -282,7 +289,7 @@ const Provisiones = () => {
                     );
                   })}
                   <Td isNumeric fontWeight="bold">
-                    {totalPorBuque[buque].toLocaleString("es-ES", {
+                    {totalPorBuque[buque.id].toLocaleString("es-ES", {
                       style: "currency",
                       currency: "EUR",
                     })}

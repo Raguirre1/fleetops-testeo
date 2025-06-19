@@ -23,7 +23,7 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import PresupuestoMensual from "./PresupuestoMensual";
 import { supabase } from "../supabaseClient";
-import { useFlota } from "./FlotaContext"; // ✅ NUEVO
+import { useFlota } from "./FlotaContext";
 
 const cuentas = [
   "Casco",
@@ -43,11 +43,14 @@ const agrupaciones = {
 };
 
 const Presupuesto = () => {
-  const { buques } = useFlota(); // ✅ NUEVO
+  const { buques } = useFlota(); // [{id, nombre}]
   const [presupuestos, setPresupuestos] = useState({});
   const [anios, setAnios] = useState([]);
   const [vistaMensual, setVistaMensual] = useState(null);
   const toast = useToast();
+
+  // Diccionario rápido de id->nombre
+  const buquesDict = Object.fromEntries(buques.map(b => [b.id, b.nombre]));
 
   useEffect(() => {
     const cargarPresupuestos = async () => {
@@ -57,10 +60,10 @@ const Presupuesto = () => {
       const nuevosPresupuestos = {};
       const añosUnicos = new Set();
 
-      data.forEach(({ anio, cuenta, buque, valor }) => {
+      data.forEach(({ anio, cuenta, buque_id, valor }) => {
         if (!nuevosPresupuestos[anio]) nuevosPresupuestos[anio] = {};
         if (!nuevosPresupuestos[anio][cuenta]) nuevosPresupuestos[anio][cuenta] = {};
-        nuevosPresupuestos[anio][cuenta][buque] = valor;
+        nuevosPresupuestos[anio][cuenta][buque_id] = valor;
         añosUnicos.add(anio);
       });
 
@@ -69,7 +72,7 @@ const Presupuesto = () => {
     };
 
     cargarPresupuestos();
-  }, []);
+  }, [buques]); // recarga si cambian los buques
 
   const crearNuevoPresupuesto = () => {
     const nuevoAño = anios.length > 0 ? Math.max(...anios) + 1 : 2025;
@@ -79,7 +82,7 @@ const Presupuesto = () => {
     cuentas.forEach((cuenta) => {
       nuevo[cuenta] = {};
       buques.forEach((buque) => {
-        nuevo[cuenta][buque] = "";
+        nuevo[cuenta][buque.id] = "";
       });
     });
 
@@ -87,14 +90,14 @@ const Presupuesto = () => {
     setAnios((prev) => [...prev, nuevoAño]);
   };
 
-  const actualizarValor = (año, cuenta, buque, valor) => {
+  const actualizarValor = (año, cuenta, buqueId, valor) => {
     setPresupuestos((prev) => ({
       ...prev,
       [año]: {
         ...prev[año],
         [cuenta]: {
           ...prev[año][cuenta],
-          [buque]: valor,
+          [buqueId]: valor,
         },
       },
     }));
@@ -104,13 +107,13 @@ const Presupuesto = () => {
     const registros = [];
     cuentas.forEach((cuenta) => {
       buques.forEach((buque) => {
-        const valor = parseFloat(presupuestos[año][cuenta][buque]) || 0;
-        registros.push({ anio: año, cuenta, buque, valor });
+        const valor = parseFloat(presupuestos[año][cuenta][buque.id]) || 0;
+        registros.push({ anio: año, cuenta, buque_id: buque.id, valor });
       });
     });
 
     const { error } = await supabase.from("presupuestos").upsert(registros, {
-      onConflict: ["anio", "cuenta", "buque"],
+      onConflict: ["anio", "cuenta", "buque_id"],
     });
 
     if (!error) {
@@ -128,7 +131,7 @@ const Presupuesto = () => {
     cuentas.forEach((cuenta) => {
       const fila = { Cuenta: cuenta };
       buques.forEach((buque) => {
-        fila[buque] = presupuestos[año][cuenta][buque] || 0;
+        fila[buquesDict[buque.id]] = presupuestos[año][cuenta][buque.id] || 0;
       });
       datos.push(fila);
     });
@@ -142,16 +145,18 @@ const Presupuesto = () => {
   };
 
   if (vistaMensual) {
+    const buqueObj = buques.find(b => b.id === vistaMensual.buqueId);
     return (
       <PresupuestoMensual
         anio={vistaMensual.año}
-        buque={vistaMensual.buque}
+        buque={buqueObj.id}           // <-- Solo el ID aquí
+        buqueNombre={buqueObj.nombre} // <-- Opcional: para mostrar en el título
         onVolver={() => setVistaMensual(null)}
       />
     );
   }
 
-  if (!buques.length) return null; // 🛑 Prevención si aún no se han cargado
+  if (!buques.length) return null; // Espera a cargar buques
 
   return (
     <Box>
@@ -235,7 +240,7 @@ const Presupuesto = () => {
                     </Th>
                     {buques.map((buque) => (
                       <Th
-                        key={buque}
+                        key={buque.id}
                         fontSize="sm"
                         bg="teal.100"
                         color="teal.800"
@@ -243,10 +248,10 @@ const Presupuesto = () => {
                         isNumeric
                         cursor="pointer"
                         _hover={{ bg: "teal.200" }}
-                        onClick={() => setVistaMensual({ año, buque })}
-                        title={`Ver mensualización de ${buque}`}
+                        onClick={() => setVistaMensual({ año, buqueId: buque.id })}
+                        title={`Ver mensualización de ${buque.nombre}`}
                       >
-                        {buque}
+                        {buque.nombre}
                       </Th>
                     ))}
                     <Th fontSize="sm" bg="teal.100" color="teal.800" textTransform="uppercase" isNumeric>
@@ -264,24 +269,24 @@ const Presupuesto = () => {
                       </Tr>
                       {cuentasGrupo.map((cuenta) => {
                         const totalCuenta = buques.reduce(
-                          (acc, buque) => acc + (parseFloat(presupuestos[año][cuenta][buque]) || 0),
+                          (acc, buque) => acc + (parseFloat(presupuestos[año][cuenta][buque.id]) || 0),
                           0
                         );
                         return (
                           <Tr key={cuenta}>
                             <Td>{cuenta}</Td>
                             {buques.map((buque) => (
-                              <Td key={buque} isNumeric>
+                              <Td key={buque.id} isNumeric>
                                 <Input
                                   size="sm"
                                   type="number"
-                                  value={presupuestos[año][cuenta][buque] || ""}
+                                  value={presupuestos[año][cuenta][buque.id] || ""}
                                   textAlign="right"
                                   px={2}
                                   variant="filled"
                                   borderColor="teal.300"
                                   focusBorderColor="teal.500"
-                                  onChange={(e) => actualizarValor(año, cuenta, buque, e.target.value)}
+                                  onChange={(e) => actualizarValor(año, cuenta, buque.id, e.target.value)}
                                 />
                               </Td>
                             ))}
@@ -300,11 +305,11 @@ const Presupuesto = () => {
                     <Td fontWeight="bold">TOTAL FINAL</Td>
                     {buques.map((buque) => {
                       const totalBuque = cuentas.reduce(
-                        (acc, cuenta) => acc + (parseFloat(presupuestos[año][cuenta][buque]) || 0),
+                        (acc, cuenta) => acc + (parseFloat(presupuestos[año][cuenta][buque.id]) || 0),
                         0
                       );
                       return (
-                        <Td key={buque} isNumeric fontWeight="bold">
+                        <Td key={buque.id} isNumeric fontWeight="bold">
                           {totalBuque.toLocaleString("es-ES", {
                             style: "currency",
                             currency: "EUR",
@@ -317,7 +322,7 @@ const Presupuesto = () => {
                         return (
                           acc +
                           buques.reduce(
-                            (suma, buque) => suma + (parseFloat(presupuestos[año][cuenta][buque]) || 0),
+                            (suma, buque) => suma + (parseFloat(presupuestos[año][cuenta][buque.id]) || 0),
                             0
                           )
                         );

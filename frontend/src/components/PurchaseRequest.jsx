@@ -56,11 +56,12 @@ const PurchaseRequest = ({ usuario, onBack }) => {
     if (!buqueSeleccionado) return;
     const { data, error } = await supabase
       .from("solicitudes_compra")
-      .select("*")
-      .eq("buque", buqueSeleccionado)
+      .select("*, buques(nombre)")
+      .eq("buque_id", buqueSeleccionado)
       .eq("archivado", false);
     if (!error) setSolicitudes(data);
   };
+
 
   const cargarPagos = async () => {
     const { data, error } = await supabase
@@ -131,7 +132,7 @@ const PurchaseRequest = ({ usuario, onBack }) => {
       fecha_pedido: formulario.fechaPedido || null,
       fecha_entrega: formulario.fechaEntrega || null,
       numero_cuenta: formulario.numeroCuenta,
-      buque: buqueSeleccionado,
+      buque_id: buqueSeleccionado,
       usuario: obtenerNombreDesdeEmail(usuario?.email),
     };
     let error;
@@ -226,6 +227,7 @@ const PurchaseRequest = ({ usuario, onBack }) => {
       fechaEntrega: s.fecha_entrega?.split("T")[0] || "",
       numeroCuenta: s.numero_cuenta,
     });
+    setBuqueSeleccionado(s.buque_id); // <-- Añade esto
     setEditarId(s.numero_pedido);
   };
 
@@ -242,7 +244,7 @@ const PurchaseRequest = ({ usuario, onBack }) => {
       fechaPedido: s.fecha_pedido?.split("T")[0] || "—",
       fechaEntrega: s.fecha_entrega?.split("T")[0] || "—",
       numeroCuenta: s.numero_cuenta || "—",
-      buque: s.buque,
+      buque_id: s.buque_id,
       usuario: s.usuario,
       estado: s.estado || "Solicitud de Compra",
     });
@@ -302,18 +304,20 @@ const PurchaseRequest = ({ usuario, onBack }) => {
         <Select value={buqueSeleccionado} onChange={(e) => setBuqueSeleccionado(e.target.value)} mb={4}>
           <option value="">-- Seleccionar --</option>
           {buques.map((buque) => (
-            <option key={buque} value={buque}>{buque}</option>
+            <option key={buque.id} value={buque.id}>{buque.nombre}</option>
           ))}
         </Select>
+
         <Button onClick={onBack} colorScheme="gray">Volver atrás</Button>
       </Box>
     );
   }
+  const nombreBuqueSeleccionado = buques.find((b) => b.id === buqueSeleccionado)?.nombre || buqueSeleccionado;
 
   return (
     <Box p={6}>
       <Flex justify="space-between" align="center" mb={4}>
-        <Heading size="lg">Solicitud de Compra - {buqueSeleccionado}</Heading>
+        <Heading size="lg">Solicitud de Compra - {nombreBuqueSeleccionado}</Heading>
         <Button size="sm" onClick={handleCambiarBuque} colorScheme="gray">Cambiar buque</Button>
       </Flex>
 

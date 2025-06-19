@@ -49,6 +49,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
   const [estadoFactura, setEstadoFactura] = useState({});
   const [ordenCampo, setOrdenCampo] = useState(null);
   const [ordenAscendente, setOrdenAscendente] = useState(true);
+  const [buquesDic, setBuquesDic] = useState({})
   const toast = useToast();
 
   const cargarSolicitudes = async () => {
@@ -56,7 +57,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
     const { data, error } = await supabase
       .from("solicitudes_asistencia")
       .select("*")
-      .eq("buque", buqueSeleccionado)
+      .eq("buque_id", buqueSeleccionado)
       .eq("archivado", false);
     if (!error) setSolicitudes(data);
   };
@@ -135,7 +136,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       urgencia: formulario.urgencia,
       fecha_solicitud: formulario.fechaSolicitud || null,
       numero_cuenta: formulario.numeroCuenta,
-      buque: buqueSeleccionado,
+      buque_id: buqueSeleccionado,
       usuario: obtenerNombreDesdeEmail(usuario?.email),
     };
     let error;
@@ -190,11 +191,12 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       urgencia: s.urgencia,
       fechaSolicitud: s.fecha_solicitud?.split("T")[0] || "—",
       numeroCuenta: s.numero_cuenta || "—",
-      buque: s.buque,
+      buque_id: s.buque_id || "",             // ✅ Pasa el ID
       usuario: s.usuario,
       estado: s.estado || "En Consulta",
     });
   };
+
 
   const actualizarEstado = async (numeroAsistencia, nuevoEstado) => {
     const fechaHoy = new Date().toISOString();
@@ -295,18 +297,19 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
         <Select value={buqueSeleccionado} onChange={(e) => setBuqueSeleccionado(e.target.value)} mb={4}>
           <option value="">-- Seleccionar --</option>
           {buques.map((buque) => (
-            <option key={buque} value={buque}>{buque}</option>
+            <option key={buque.id} value={buque.id}>{buque.nombre}</option>
           ))}
         </Select>
         <Button onClick={onBack} colorScheme="gray">Volver atrás</Button>
       </Box>
     );
   }
+  const nombreBuqueSeleccionado = buques.find((b) => b.id === buqueSeleccionado)?.nombre || buqueSeleccionado;;
 
   return (
     <Box p={6}>
       <Flex justify="space-between" align="center" mb={4}>
-        <Heading size="lg">Asistencia Técnica - {buqueSeleccionado}</Heading>
+        <Heading size="lg"> Asistencia Técnica - {nombreBuqueSeleccionado}</Heading>
         <Button size="sm" onClick={() => setBuqueSeleccionado("")} colorScheme="gray">Cambiar buque</Button>
       </Flex>
 

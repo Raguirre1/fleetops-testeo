@@ -9,18 +9,19 @@ export const FlotaProvider = ({ children }) => {
 
   useEffect(() => {
     const cargarBuques = async () => {
-      if (!flotaSeleccionada) return;
+      if (!flotaSeleccionada) return setBuques([]);
       const { data, error } = await supabase
         .from("buques")
-        .select("nombre")
+        .select("id, nombre")
         .eq("flota_id", flotaSeleccionada.id);
 
-      if (!error) setBuques(data.map((b) => b.nombre));
+      if (!error) setBuques(data);
       else console.error("Error cargando buques:", error);
     };
 
     cargarBuques();
   }, [flotaSeleccionada]);
+
 
   return (
     <FlotaContext.Provider value={{ flotaSeleccionada, setFlotaSeleccionada, buques }}>

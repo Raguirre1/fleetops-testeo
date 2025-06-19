@@ -25,7 +25,8 @@ const cuentas = [
   "SEP", "Fonda", "MLC", "Aceite", "Inversiones",
 ];
 
-const ProvisionesDetalle = ({ buque, cuenta, onBack }) => {
+// Recibe también buqueNombre si quieres mostrarlo
+const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
   const [provisiones, setProvisiones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ordenCampo, setOrdenCampo] = useState("valor");
@@ -36,10 +37,11 @@ const ProvisionesDetalle = ({ buque, cuenta, onBack }) => {
   const cargarProvisiones = async () => {
     setLoading(true);
 
+    // Pedidos
     const { data: pedidos } = await supabase
       .from("solicitudes_compra")
-      .select("numero_pedido, buque, numero_cuenta")
-      .eq("buque", buque)
+      .select("numero_pedido, buque_id, numero_cuenta")
+      .eq("buque_id", buque)
       .in("estado", ["Pedido Activo", "Recibido"]);
 
     const { data: cotizaciones } = await supabase
@@ -49,8 +51,8 @@ const ProvisionesDetalle = ({ buque, cuenta, onBack }) => {
 
     const { data: asistencias } = await supabase
       .from("solicitudes_asistencia")
-      .select("numero_ate, buque, numero_cuenta")
-      .eq("buque", buque);
+      .select("numero_ate, buque_id, numero_cuenta")
+      .eq("buque_id", buque)
 
     const { data: cotizacionesAsist } = await supabase
       .from("asistencias_proveedor")
@@ -124,7 +126,7 @@ const ProvisionesDetalle = ({ buque, cuenta, onBack }) => {
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([buffer], { type: "application/octet-stream" });
-    saveAs(blob, `Provisiones_${buque}_${cuenta}.xlsx`);
+    saveAs(blob, `Provisiones_${buqueNombre || buque}_${cuenta}.xlsx`);
   };
 
   const cambiarOrden = (campo) => {
@@ -201,7 +203,7 @@ const ProvisionesDetalle = ({ buque, cuenta, onBack }) => {
   return (
     <Box p={6}>
       <Heading size="lg" mb={4}>
-        📋 Detalle de provisiones - {buque} / {cuenta}
+        📋 Detalle de provisiones - {buqueNombre || buque} / {cuenta}
       </Heading>
 
       <Flex mb={4} gap={3} align="center">

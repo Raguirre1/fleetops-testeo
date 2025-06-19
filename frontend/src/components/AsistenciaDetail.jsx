@@ -9,7 +9,6 @@ import {
   Button,
   FormControl,
   FormLabel,
-  Input,
   Textarea,
   VStack,
   Text,
@@ -26,12 +25,15 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
   const [infoadicional, setInfoadicional] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [nombreBuque, setNombreBuque] = useState("—");
   const toast = useToast();
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
+
+        // Cargar comentarios e info adicional
         const { data, error } = await supabase
           .from("asistencias_info")
           .select("comentarios, info_adicional")
@@ -43,6 +45,22 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
         if (data) {
           setComentarios(data.comentarios || "");
           setInfoadicional(data.info_adicional || "");
+        }
+
+        // Cargar nombre del buque usando buque_id
+        if (asistencia.buque_id) {
+          const { data: buqueData, error: buqueError } = await supabase
+            .from("buques")
+            .select("nombre")
+            .eq("id", asistencia.buque_id)
+            .maybeSingle();
+          if (!buqueError && buqueData && buqueData.nombre) {
+            setNombreBuque(buqueData.nombre);
+          } else {
+            setNombreBuque("—");
+          }
+        } else {
+          setNombreBuque("—");
         }
       } catch (err) {
         setError("Error al cargar los datos.");
@@ -78,15 +96,15 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
       toast({ title: "Error al guardar", status: "error", duration: 3000, isClosable: true });
     }
   };
+
   const handleVolverConConfirmacion = () => {
     const confirmar = window.confirm(
-    "¿Seguro que quieres volver?\nAsegúrate de guardar los cambios antes de continuar."
+      "¿Seguro que quieres volver?\nAsegúrate de guardar los cambios antes de continuar."
     );
     if (confirmar) {
-     volver(asistencia);
+      volver(asistencia);
     }
   };
-
 
   return (
     <Box p={6} maxW="4xl" mx="auto">
@@ -94,7 +112,7 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
         <Heading size="md" color="blue.600" mb={2}>🛠️ Detalle de Asistencia Técnica</Heading>
         <Text><strong>Nº ATE:</strong> {asistencia.numeroAsistencia}</Text>
         <Text><strong>Título:</strong> {asistencia.tituloAsistencia || "—"}</Text>
-        <Text><strong>Buque:</strong> {asistencia.buque || "—"}</Text>
+        <Text><strong>Buque:</strong> {nombreBuque}</Text>
         <Text><strong>Solicitante:</strong> {asistencia.usuario || "—"}</Text>
         <Text><strong>Urgencia:</strong> {asistencia.urgencia || "—"}</Text>
         <Text><strong>Fecha de solicitud:</strong> {asistencia.fechaSolicitud || "—"}</Text>
@@ -141,7 +159,6 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
         <Button onClick={handleVolverConConfirmacion} colorScheme="gray" mt={6}>
           Volver
         </Button>
-
       </VStack>
     </Box>
   );

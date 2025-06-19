@@ -16,12 +16,17 @@ import {
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
 import DetalleProvisionEnviada from "./DetalleProvisionEnviada";
+import { useFlota } from "./FlotaContext"; // ⬅️ Añadido
 
 const ProvisionesEnviadas = ({ onBack }) => {
+  const { buques } = useFlota(); // ⬅️ Cargar lista de buques
   const [enviadas, setEnviadas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [detalleSeleccionado, setDetalleSeleccionado] = useState(null);
   const toast = useToast();
+
+  // Diccionario rápido id->nombre
+  const buquesDict = Object.fromEntries(buques.map(b => [b.id, b.nombre]));
 
   const cargarProvisiones = async () => {
     setLoading(true);
@@ -71,7 +76,6 @@ const ProvisionesEnviadas = ({ onBack }) => {
         duration: 2000,
         isClosable: true,
       });
-      // Actualizar estado sin recargar
       setEnviadas(enviadas.filter((p) => p.id !== id));
     }
   };
@@ -80,6 +84,7 @@ const ProvisionesEnviadas = ({ onBack }) => {
     return (
       <DetalleProvisionEnviada
         envio={detalleSeleccionado}
+        buquesDict={buquesDict}        // ⬅️ Pasamos el diccionario
         onBack={() => setDetalleSeleccionado(null)}
       />
     );

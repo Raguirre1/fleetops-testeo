@@ -19,6 +19,7 @@ import { supabase } from "../supabaseClient";
 const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
   const [pedidos, setPedidos] = useState([]);
   const [estadoFactura, setEstadoFactura] = useState({});
+  const [diccionarioBuques, setDiccionarioBuques] = useState({});
   const toast = useToast();
 
   const cargarArchivados = async () => {
@@ -76,52 +77,53 @@ const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
       </Flex>
 
       <Table variant="simple" size="sm">
-        <Thead>
-          <Tr>
-            <Th>Nº Pedido</Th>
-            <Th>Título</Th>
-            <Th>Buque</Th>
-            <Th>Usuario</Th>
-            <Th>Estado</Th>
-            <Th>Factura</Th>
-            <Th>Acciones</Th>
+      <Thead>
+        <Tr>
+          <Th>Nº Pedido</Th>
+          <Th>Título</Th>
+          {/* <Th>Buque</Th> <-- ELIMINADA */}
+          <Th>Usuario</Th>
+          <Th>Estado</Th>
+          <Th>Factura</Th>
+          <Th>Acciones</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {pedidos.map((p) => (
+          <Tr key={p.numero_pedido}>
+            <Td fontWeight="bold">{p.numero_pedido}</Td>
+            <Td>{p.titulo_pedido}</Td>
+            {/* <Td>{p.buque}</Td> <-- ELIMINADA */}
+            <Td>{p.usuario}</Td>
+            <Td>{p.estado || "-"}</Td>
+            <Td>
+              {estadoFactura[p.numero_pedido] ? (
+                <Tooltip label="Falta cargar la factura final" hasArrow>
+                  <span>🟡</span>
+                </Tooltip>
+              ) : (
+                "✅"
+              )}
+            </Td>
+            <Td>
+              <Flex gap={1}>
+                <Tooltip label="Desarchivar pedido" hasArrow>
+                  <Button size="xs" onClick={() => desarchivarPedido(p.numero_pedido)}>
+                    🔁 Desarchivar
+                  </Button>
+                </Tooltip>
+                <Tooltip label="Ver detalles del pedido" hasArrow>
+                  <Button size="xs" onClick={() => onVerDetalle(p)}>
+                    🔍 Ver
+                  </Button>
+                </Tooltip>
+              </Flex>
+            </Td>
           </Tr>
-        </Thead>
-        <Tbody>
-          {pedidos.map((p) => (
-            <Tr key={p.numero_pedido}>
-              <Td fontWeight="bold">{p.numero_pedido}</Td>
-              <Td>{p.titulo_pedido}</Td>
-              <Td>{p.buque}</Td>
-              <Td>{p.usuario}</Td>
-              <Td>{p.estado || "-"}</Td>
-              <Td>
-                {estadoFactura[p.numero_pedido] ? (
-                  <Tooltip label="Falta cargar la factura final" hasArrow>
-                    <span>🟡</span>
-                  </Tooltip>
-                ) : (
-                  "✅"
-                )}
-              </Td>
-              <Td>
-                <Flex gap={1}>
-                  <Tooltip label="Desarchivar pedido" hasArrow>
-                    <Button size="xs" onClick={() => desarchivarPedido(p.numero_pedido)}>
-                      🔁 Desarchivar
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label="Ver detalles del pedido" hasArrow>
-                    <Button size="xs" onClick={() => onVerDetalle(p)}>
-                      🔍 Ver
-                    </Button>
-                  </Tooltip>
-                </Flex>
-              </Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
+        ))}
+      </Tbody>
+    </Table>
+
     </Box>
   );
 };
