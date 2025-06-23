@@ -126,6 +126,20 @@ const PurchaseRequest = ({ usuario, onBack }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // 🚨 Validación: bloquear si contiene "/"
+    const numero = formulario.numeroPedido;
+    if (numero.includes("/")) {
+      toast({
+        title: "Nº de pedido inválido",
+        description: "El número de pedido no puede contener el carácter / (barra).",
+        status: "error",
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+
     const datosPedido = {
       titulo_pedido: formulario.tituloPedido,
       urgencia: formulario.urgencia,

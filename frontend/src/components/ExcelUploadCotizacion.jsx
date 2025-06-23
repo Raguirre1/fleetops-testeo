@@ -243,8 +243,22 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
         borderRadius="md"
         textAlign="center"
         mb={4}
+        onDragOver={e => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={e => {
+          e.preventDefault();
+          setIsDragging(false);
+        }}
+        onDrop={e => {
+          handleDrop(e);
+          setIsDragging(false);
+        }}
       >
-        <Text fontWeight="medium">Arrastra el archivo Excel aquí</Text>
+        <Text fontWeight="medium">
+          {isDragging ? "¡Suelta el archivo Excel aquí!" : "Arrastra el archivo Excel aquí"}
+        </Text>
         <Input
           type="file"
           accept=".xlsx,.xls"
@@ -261,6 +275,7 @@ const ExcelUploadCotizacion = ({ numeroPedido }) => {
           </Text>
         )}
       </Box>
+
 
       <HStack spacing={3} mb={4} flexWrap="wrap">
         <Button onClick={handleExportToExcel} colorScheme="green">📤 Exportar Excel</Button>

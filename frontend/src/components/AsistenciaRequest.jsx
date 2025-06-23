@@ -130,6 +130,20 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // 🚨 Validación ANTES de hacer nada más
+    const numero = formulario.numeroAsistencia;
+    if (numero.includes("/")) {
+      toast({
+        title: "Nº de asistencia inválido",
+        description: "El número de asistencia no puede contener el carácter / (barra).",
+        status: "error",
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+
     const datos = {
       numero_ate: formulario.numeroAsistencia,
       titulo_ate: formulario.tituloAsistencia,
@@ -167,6 +181,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       toast({ title: "Error al guardar", description: error.message, status: "error", duration: 3000 });
     }
   };
+
 
   const handleEditar = (s) => {
     setFormulario({
