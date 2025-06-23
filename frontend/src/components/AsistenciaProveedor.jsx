@@ -164,16 +164,28 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
 
   const handleSave = async () => {
     const incompletas = cotizaciones.some(
-      (c) => !c.proveedor?.trim() || !c.path_cotizacion
+      (c) => !c.proveedor?.trim()
     );
 
     if (incompletas) {
       toast({
-        title: "Faltan campos obligatorios o archivo de cotización",
+        title: "Debes rellenar el nombre del proveedor",
         status: "error",
       });
       return;
     }
+
+    const sinPdf = cotizaciones.some((c) => !c.path_cotizacion);
+
+    if (sinPdf) {
+      toast({
+        title: "Advertencia",
+        description: "Se guardarán cotizaciones sin PDF adjunto. Añade un archivo si está disponible.",
+        status: "warning",
+        duration: 5000,
+      });
+    }
+
 
     try {
       for (const cot of cotizaciones) {
@@ -297,7 +309,7 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                   Seleccionar archivo
                 </FormLabel>
 
-                {cot.path_cotizacion && (
+                {cot.path_cotizacion ? (
                   <VStack mt={3} spacing={2}>
                     <Text fontSize="sm" noOfLines={1}>
                       {cot.path_cotizacion.split("/").pop()}
@@ -323,6 +335,10 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                       </Button>
                     </HStack>
                   </VStack>
+                ) : (
+                  <Text fontSize="sm" color="orange.500" mt={3}>
+                    Estimación sin PDF adjunto
+                  </Text>
                 )}
               </Box>
 
