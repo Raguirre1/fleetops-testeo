@@ -46,7 +46,7 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
 
     const { data: cotizaciones } = await supabase
       .from("cotizaciones_proveedor")
-      .select("numero_pedido, proveedor, valor, valor_factura, estado, created_at")
+      .select("numero_pedido, proveedor, valor, valor_factura, estado, fecha_aceptacion")
       .eq("estado", "aceptada");
 
     const { data: asistencias } = await supabase
@@ -56,7 +56,7 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
 
     const { data: cotizacionesAsist } = await supabase
       .from("asistencias_proveedor")
-      .select("numero_asistencia, proveedor, valor, valor_factura, estado, created_at")
+      .select("numero_asistencia, proveedor, valor, valor_factura, estado, fecha_aceptacion")
       .eq("estado", "aceptada");
 
     const lista = [];
@@ -77,6 +77,7 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
             cuenta: pedido.numero_cuenta || "",
             valor: Number(cot.valor) || 0,
             fecha: cot.created_at,
+            fecha: cot.fecha_aceptacion || cot.created_at, 
           });
         }
       });
@@ -97,6 +98,7 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
             cuenta: asistencia.numero_cuenta || "",
             valor: Number(cot.valor) || 0,
             fecha: cot.created_at,
+            fecha: cot.fecha_aceptacion || cot.created_at, 
           });
         }
       });

@@ -159,7 +159,7 @@ const DetalleProvisionEnviada = ({ envio, buquesDict = {}, onBack }) => {
               {detallesParseados
                 .filter(
                   (d) =>
-                    d.buque === cuentaSeleccionada.buque &&
+                    (d.buque_id === cuentaSeleccionada.buque || d.buque === cuentaSeleccionada.buque) &&
                     d.cuenta === cuentaSeleccionada.cuenta
                 )
                 .sort((a, b) => {
@@ -182,6 +182,7 @@ const DetalleProvisionEnviada = ({ envio, buquesDict = {}, onBack }) => {
                   </Tr>
                 ))}
             </Tbody>
+
           </Table>
         </Box>
       )}

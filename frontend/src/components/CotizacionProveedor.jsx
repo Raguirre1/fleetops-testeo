@@ -24,8 +24,9 @@ const CotizacionProveedor = ({ numeroPedido }) => {
     const fetchCotizaciones = async () => {
       const { data, error } = await supabase
         .from("cotizaciones_proveedor")
-        .select("*")
+        .select("numero_pedido, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at, fecha_aceptacion")
         .eq("numero_pedido", numeroPedido);
+
 
       if (error) {
         console.error("Error cargando cotizaciones:", error);
@@ -48,6 +49,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
         path_cotizacion: "",
         path_invoice: "",
         valor_factura: "",
+        fecha_aceptacion: "", 
       },
     ]);
   };
@@ -202,6 +204,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
             path_cotizacion: cot.path_cotizacion,
             path_invoice: cot.path_invoice || null,
             valor_factura,
+            fecha_aceptacion: cot.fecha_aceptacion || null, // <--- Aquí la añades
           },
           { onConflict: ["numero_pedido", "proveedor"] }
         );
@@ -239,6 +242,13 @@ const CotizacionProveedor = ({ numeroPedido }) => {
                   value={cot.valor}
                   onChange={(e) => handleChange(index, "valor", e.target.value)}
                 />
+                <Text fontWeight="medium" mt={2}>Fecha aceptación cotización</Text>
+                <Input
+                  type="date"
+                  value={cot.fecha_aceptacion ? cot.fecha_aceptacion.slice(0, 10) : ""}
+                  onChange={e => handleChange(index, "fecha_aceptacion", e.target.value)}
+                  width="fit-content"
+                />                
               </Box>
 
               <HStack mt={2} spacing={4}>

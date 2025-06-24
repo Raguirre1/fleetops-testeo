@@ -25,7 +25,7 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
     const fetchCotizaciones = async () => {
       const { data, error } = await supabase
         .from("asistencias_proveedor")
-        .select("numero_asistencia, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at")
+        .select("numero_asistencia, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at, fecha_aceptacion")
         .eq("numero_asistencia", numeroAsistencia);
 
       if (error) {
@@ -197,6 +197,7 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
           path_cotizacion: cot.path_cotizacion || null,
           path_invoice: cot.path_invoice || null,
           valor_factura: isNaN(parseFloat(cot.valor_factura)) ? 0 : parseFloat(cot.valor_factura),
+          fecha_aceptacion: cot.fecha_aceptacion || null, 
         };
 
         const { error } = await supabase
@@ -249,6 +250,13 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                   type="number"
                   value={cot.valor}
                   onChange={(e) => handleChange(index, "valor", e.target.value)}
+                />
+                <Text fontWeight="medium" mt={2}>Fecha aceptación cotización</Text>
+                <Input
+                  type="date"
+                  value={cot.fecha_aceptacion ? cot.fecha_aceptacion.slice(0, 10) : ""}
+                  onChange={e => handleChange(index, "fecha_aceptacion", e.target.value)}
+                  width="fit-content"
                 />
               </Box>
 
