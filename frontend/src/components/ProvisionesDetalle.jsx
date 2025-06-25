@@ -76,7 +76,6 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
             proveedor: cot.proveedor,
             cuenta: pedido.numero_cuenta || "",
             valor: Number(cot.valor) || 0,
-            fecha: cot.created_at,
             fecha: cot.fecha_aceptacion || cot.created_at, 
           });
         }
@@ -97,7 +96,6 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
             proveedor: cot.proveedor,
             cuenta: asistencia.numero_cuenta || "",
             valor: Number(cot.valor) || 0,
-            fecha: cot.created_at,
             fecha: cot.fecha_aceptacion || cot.created_at, 
           });
         }

@@ -167,8 +167,9 @@ const CotizacionProveedor = ({ numeroPedido }) => {
   };
 
   const handleSave = async () => {
+    // Solo chequea campos en cotizaciones activas
     const incompletas = cotizaciones.some(
-      (c) => !c.proveedor.trim() || !c.path_cotizacion
+      (c) => c.estado !== "cancelada" && (!c.proveedor.trim() || !c.path_cotizacion)
     );
 
     if (incompletas) {
@@ -182,29 +183,22 @@ const CotizacionProveedor = ({ numeroPedido }) => {
     try {
       for (const cot of cotizaciones) {
         const proveedor = cot.proveedor.trim();
-        const valor = parseFloat(cot.valor);
+        const valor = parseFloat(cot.valor) || 0;
         const valor_factura =
           cot.valor_factura === "" || cot.valor_factura == null
             ? null
             : parseFloat(cot.valor_factura);
 
-        if (!proveedor || isNaN(valor)) {
-          toast({
-            title: `Proveedor o valor inválido para "${cot.proveedor}"`,
-            status: "error",
-          });
-          return;
-        }
         await supabase.from("cotizaciones_proveedor").upsert(
           {
             numero_pedido: numeroPedido,
             proveedor,
-            valor,
+            valor: cot.estado === "cancelada" ? 0 : valor,
             estado: cot.estado,
-            path_cotizacion: cot.path_cotizacion,
-            path_invoice: cot.path_invoice || null,
-            valor_factura,
-            fecha_aceptacion: cot.fecha_aceptacion || null, // <--- Aquí la añades
+            path_cotizacion: cot.estado === "cancelada" ? null : cot.path_cotizacion,
+            path_invoice: cot.estado === "cancelada" ? null : cot.path_invoice,
+            valor_factura: cot.estado === "cancelada" ? null : valor_factura,
+            fecha_aceptacion: cot.estado === "cancelada" ? null : cot.fecha_aceptacion,
           },
           { onConflict: ["numero_pedido", "proveedor"] }
         );
@@ -216,6 +210,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
       toast({ title: "Error al guardar en Supabase", status: "error" });
     }
   };
+
 
 
   return (
