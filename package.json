@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "@supabase/supabase-js": "^2.50.0",
-    "jsonwebtoken": "^9.0.2"
+    "fs-extra": "^11.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.7.0"
   }
 }

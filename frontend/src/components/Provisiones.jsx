@@ -13,13 +13,21 @@ import {
   Button,
   Flex,
   useToast,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody
 } from "@chakra-ui/react";
 import { DownloadIcon } from "@chakra-ui/icons";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import ProvisionesDetalle from "./ProvisionesDetalle";
 import ProvisionesEnviadas from "./ProvisionesEnviadas";
-import { useFlota } from "./FlotaContext"; // Importamos contexto
+import { useFlota } from "./FlotaContext";
+import { ExternalLinkIcon } from "@chakra-ui/icons";
+import { motion, AnimatePresence } from "framer-motion";
 
 const cuentas = [
   "Casco", "Máquinas", "Electricidad", "Electrónicas",
@@ -27,19 +35,21 @@ const cuentas = [
 ];
 
 const Provisiones = () => {
-  const { buques } = useFlota(); // buques = [{id, nombre}]
+  const { buques } = useFlota();
   const [resumen, setResumen] = useState({});
   const [detalles, setDetalles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [vistaDetalle, setVistaDetalle] = useState(null);
+  const [detalleModal, setDetalleModal] = useState(null); // { buque, cuenta }
+  const [modalOpen, setModalOpen] = useState(false);
   const [mostrarEnviadas, setMostrarEnviadas] = useState(false);
   const [refrescar, setRefrescar] = useState(false);
   const toast = useToast();
 
+  // ...tu función cargarResumen sin cambios...
+  // ...tu useEffect de cargarResumen sin cambios...
+
   const cargarResumen = async () => {
     setLoading(true);
-
-    // Cambiado: seleccionamos buque_id y no buque por nombre
     const { data: pedidos, error: errorPedidos } = await supabase
       .from("solicitudes_compra")
       .select("numero_pedido, buque_id, numero_cuenta, estado")
@@ -76,7 +86,7 @@ const Provisiones = () => {
 
       cotAprobadas.forEach((c) => {
         detallesTemp.push({
-          buque_id: pedido.buque_id, // Cambiado a buque_id
+          buque_id: pedido.buque_id,
           numero_pedido: pedido.numero_pedido,
           proveedor: c.proveedor,
           cuenta: pedido.numero_cuenta || "Sin cuenta",
@@ -104,7 +114,7 @@ const Provisiones = () => {
 
       cotAprobadas.forEach((c) => {
         detallesTemp.push({
-          buque_id: asistencia.buque_id, // Cambiado a buque_id
+          buque_id: asistencia.buque_id,
           numero_pedido: asistencia.numero_ate,
           proveedor: c.proveedor,
           cuenta: asistencia.numero_cuenta || "Sin cuenta",
@@ -132,16 +142,14 @@ const Provisiones = () => {
     // eslint-disable-next-line
   }, [refrescar]);
 
-  if (!buques || buques.length === 0) return null; // Espera a cargar los buques
+  if (!buques || buques.length === 0) return null;
 
-  // Genera diccionario {id: nombre} para lookup rápido
   const buquesDict = Object.fromEntries(buques.map(b => [b.id, b.nombre]));
 
   const totalPorCuenta = {};
   const totalPorBuque = {};
   let totalGeneral = 0;
 
-  // Recorrer por buque_id, pero mostrar nombre
   buques.forEach((buque) => {
     totalPorBuque[buque.id] = 0;
     cuentas.forEach((cuenta) => {
@@ -212,21 +220,18 @@ const Provisiones = () => {
     }
   };
 
-  if (vistaDetalle) {
-    const buqueObj = buques.find(b => b.id === vistaDetalle.buque);
-    const buqueNombre = buqueObj ? buqueObj.nombre : vistaDetalle.buque;
-    return (
-      <ProvisionesDetalle
-        buque={vistaDetalle.buque}
-        buqueNombre={buqueNombre}       
-        cuenta={vistaDetalle.cuenta}
-        onBack={() => {
-          setVistaDetalle(null);
-          setRefrescar(prev => !prev);
-        }}
-      />
-    );
-  }
+  // --- AQUÍ CAMBIA: Detalle con Modal ---
+  const abrirDetalle = (buque, cuenta) => {
+    setDetalleModal({ buque, cuenta });
+    setModalOpen(true);
+  };
+
+  const cerrarDetalle = () => {
+    setModalOpen(false);
+    setTimeout(() => {
+      setRefrescar(prev => !prev);
+    }, 250);
+  };
 
   if (mostrarEnviadas) {
     return <ProvisionesEnviadas onBack={() => setMostrarEnviadas(false)} />;
@@ -273,18 +278,37 @@ const Provisiones = () => {
                       <Td
                         key={cuenta}
                         isNumeric
-                        _hover={{ bg: "gray.100", cursor: "pointer" }}
-                        onClick={() =>
-                          valor > 0 &&
-                          setVistaDetalle({ buque: buque.id, cuenta: cuenta })
-                        }
+                        _hover={{ bg: "gray.100", cursor: valor > 0 ? "pointer" : "default" }}
                       >
-                        {valor > 0
-                          ? valor.toLocaleString("es-ES", {
-                              style: "currency",
-                              currency: "EUR",
-                            })
-                          : "-"}
+                        {valor > 0 ? (
+                          <Box
+                            as={motion.div}
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="flex-end"
+                            whileHover={{ scale: 1.05, backgroundColor: "#e3f2fd" }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => abrirDetalle(buque.id, cuenta)}
+                            style={{
+                              cursor: "pointer",
+                              borderRadius: 6,
+                              padding: "0 0.5rem",
+                              minWidth: 110
+                            }}
+                            title="Ver detalle de provisiones"
+                          >
+                            <span style={{
+                              color: "#1565c0",
+                              textDecoration: "underline"
+                            }}>
+                              {valor.toLocaleString("es-ES", {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                            <ExternalLinkIcon ml={2} color="gray.500" />
+                          </Box>
+                        ) : "-"}
                       </Td>
                     );
                   })}
@@ -317,6 +341,35 @@ const Provisiones = () => {
           </Table>
         </Box>
       )}
+
+      {/* --- Modal de Detalle de Provisiones --- */}
+      <AnimatePresence>
+        {modalOpen && detalleModal && (
+          <Modal isOpen={modalOpen} onClose={cerrarDetalle} size="6xl" motionPreset="slideInBottom">
+            <ModalOverlay />
+            <ModalContent
+              as={motion.div}
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              transition={{ duration: 0.25 }}
+            >
+              <ModalHeader>
+                Detalle de provisiones - {buquesDict[detalleModal.buque]} / {detalleModal.cuenta}
+              </ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <ProvisionesDetalle
+                  buque={detalleModal.buque}
+                  buqueNombre={buquesDict[detalleModal.buque]}
+                  cuenta={detalleModal.cuenta}
+                  onBack={cerrarDetalle}
+                />
+              </ModalBody>
+            </ModalContent>
+          </Modal>
+        )}
+      </AnimatePresence>
     </Box>
   );
 };

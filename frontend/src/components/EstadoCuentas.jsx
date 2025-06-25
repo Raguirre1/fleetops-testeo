@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Table, Thead, Tbody, Tr, Th, Td, Heading, Spinner, Text, Select, IconButton, Input
+  Box, Table, Thead, Tbody, Tr, Th, Td, Heading, Spinner, Text, Select, IconButton, Input, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, useDisclosure
 } from '@chakra-ui/react';
-import { EditIcon, CheckIcon } from '@chakra-ui/icons';
+import { EditIcon, CheckIcon, ExternalLinkIcon } from '@chakra-ui/icons';
 import { supabase } from '../supabaseClient';
 import { useFlota } from './FlotaContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import EstadoCuentasDetalles from './EstadoCuentasDetalles';
 
 const meses = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -18,10 +20,17 @@ const EstadoCuentasResumen = ({ anio }) => {
   const [resumen, setResumen] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Para edición acumulado
+  // Edición acumulado manual
   const [editIdx, setEditIdx] = useState(null);
   const [editValor, setEditValor] = useState('');
   const [acumuladosManual, setAcumuladosManual] = useState({}); // { cuenta: valor }
+
+  // Detalle modal
+  const [detalleCuenta, setDetalleCuenta] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+
+  // Chakra modal disclosure (opcional)
+  // const { isOpen, onOpen, onClose } = useDisclosure();
 
   useEffect(() => {
     if (selectedBuque && selectedMes) cargarResumen();
@@ -38,48 +47,33 @@ const EstadoCuentasResumen = ({ anio }) => {
       .eq('buque_id', selectedBuque)
       .eq('anio', anio);
 
-    // 2. Leer solicitudes de compra y asistencias
+    // 2. Leer solicitudes de compra y asistencias (para cruzar)
     const { data: compras } = await supabase
       .from('solicitudes_compra')
-      .select('numero_pedido, buque_id, numero_cuenta, fecha_estado');
+      .select('numero_pedido, buque_id, numero_cuenta');
 
     const { data: asistencias } = await supabase
       .from('solicitudes_asistencia')
-      .select('numero_ate, buque_id, numero_cuenta, fecha_estado');
+      .select('numero_ate, buque_id, numero_cuenta');
 
-    // 3. Leer cotizaciones aceptadas de compras
+    // 3. Leer cotizaciones aceptadas
     const { data: cotizaciones } = await supabase
       .from('cotizaciones_proveedor')
       .select('*')
       .eq('estado', 'aceptada');
 
-    // 4. Leer cotizaciones aceptadas de asistencias
     const { data: cotizacionesAsis } = await supabase
       .from('asistencias_proveedor')
       .select('*')
       .eq('estado', 'aceptada');
 
-    // Todas las cuentas
     const cuentas = [...new Set(presupuestos.map(p => p.cuenta))];
-
-    // Mes num (1-12)
     const mesNum = meses.findIndex(m => m === selectedMes) + 1;
 
-    // Preparamos el resumen
     const resumenCuentas = cuentas.map(cuenta => {
-      // Presupuesto hasta mes anterior
-      const presAnt = presupuestos
-        .filter(p => p.cuenta === cuenta && (
-          (typeof p.mes === "string"
-            ? meses.findIndex(m => m.toLowerCase() === p.mes.toLowerCase()) + 1
-            : Number(p.mes)
-          ) < mesNum
-        ))
-        .reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
-
-      // Presupuesto mes actual (admite texto o número)
+      // Presupuesto mes actual
       const presMes = presupuestos
-        .filter(p => 
+        .filter(p =>
           p.cuenta === cuenta &&
           (
             typeof p.mes === "string"
@@ -89,109 +83,54 @@ const EstadoCuentasResumen = ({ anio }) => {
         )
         .reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
 
-      // Presupuesto total hasta el mes seleccionado
-      const presTotal = presupuestos
-        .filter(p => p.cuenta === cuenta && (
-          (typeof p.mes === "string"
-            ? meses.findIndex(m => m.toLowerCase() === p.mes.toLowerCase()) + 1
-            : Number(p.mes)
-          ) <= mesNum
-        ))
-        .reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
-
-      // Gasto real del mes (compras y asistencias)
-      const gastoMes = [
-        ...cotizaciones
-          .map(cot => {
-            // Si tienes fecha_cotizacion, úsala. Si no, fallback a created_at (por compatibilidad)
-            const fecha = cot.fecha_cotizacion || cot.created_at;
-            if (
-              cot.estado === "aceptada" &&
-              cot.buque_id === selectedBuque &&
-              cot.numero_cuenta === cuenta &&
-              cot.valor &&
-              fecha
-            ) {
-              const f = new Date(fecha);
-              if ((f.getMonth() + 1) === mesNum && f.getFullYear() === anio) {
-                return parseFloat(cot.valor) || 0;
-              }
+      // ---- Gasto real del mes (compras) ----
+      const gastoCompras = cotizaciones
+        .map(cot => {
+          const solicitud = compras.find(s => s.numero_pedido === cot.numero_pedido);
+          if (
+            solicitud &&
+            solicitud.buque_id === selectedBuque &&
+            solicitud.numero_cuenta === cuenta &&
+            cot.valor &&
+            cot.fecha_aceptacion
+          ) {
+            const f = new Date(cot.fecha_aceptacion);
+            if ((f.getMonth() + 1) === mesNum && f.getFullYear() === anio) {
+              return parseFloat(cot.valor) || 0;
             }
-            return 0;
-          })
-          .filter(val => !!val),
-        ...cotizacionesAsis
-          .map(cot => {
-            const fecha = cot.fecha_cotizacion || cot.created_at;
-            if (
-              cot.estado === "aceptada" &&
-              cot.buque_id === selectedBuque &&
-              cot.numero_cuenta === cuenta &&
-              cot.valor &&
-              fecha
-            ) {
-              const f = new Date(fecha);
-              if ((f.getMonth() + 1) === mesNum && f.getFullYear() === anio) {
-                return parseFloat(cot.valor) || 0;
-              }
-            }
-            return 0;
-          })
-          .filter(val => !!val)
-      ].reduce((a, b) => a + b, 0);
+          }
+          return 0;
+        })
+        .reduce((a, b) => a + b, 0);
 
-      // Gasto real acumulado hasta el mes anterior (usando fecha de aceptación)
-      const gastoAnt = [
-        ...cotizaciones
-          .map(cot => {
-            const fecha = cot.fecha_cotizacion || cot.created_at;
-            if (
-              cot.estado === "aceptada" &&
-              cot.buque_id === selectedBuque &&
-              cot.numero_cuenta === cuenta &&
-              cot.valor &&
-              fecha
-            ) {
-              const f = new Date(fecha);
-              if (
-                (f.getFullYear() < anio) ||
-                (f.getFullYear() === anio && (f.getMonth() + 1) < mesNum)
-              ) {
-                return parseFloat(cot.valor) || 0;
-              }
+      // ---- Gasto real del mes (asistencias) ----
+      const gastoAsistencias = cotizacionesAsis
+        .map(cot => {
+          const asistencia = asistencias.find(s => s.numero_ate === cot.numero_asistencia);
+          if (
+            asistencia &&
+            asistencia.buque_id === selectedBuque &&
+            asistencia.numero_cuenta === cuenta &&
+            cot.valor &&
+            cot.fecha_aceptacion
+          ) {
+            const f = new Date(cot.fecha_aceptacion);
+            if ((f.getMonth() + 1) === mesNum && f.getFullYear() === anio) {
+              return parseFloat(cot.valor) || 0;
             }
-            return 0;
-          })
-          .filter(val => !!val),
-        ...cotizacionesAsis
-          .map(cot => {
-            const fecha = cot.fecha_cotizacion || cot.created_at;
-            if (
-              cot.estado === "aceptada" &&
-              cot.buque_id === selectedBuque &&
-              cot.numero_cuenta === cuenta &&
-              cot.valor &&
-              fecha
-            ) {
-              const f = new Date(fecha);
-              if (
-                (f.getFullYear() < anio) ||
-                (f.getFullYear() === anio && (f.getMonth() + 1) < mesNum)
-              ) {
-                return parseFloat(cot.valor) || 0;
-              }
-            }
-            return 0;
-          })
-          .filter(val => !!val)
-      ].reduce((a, b) => a + b, 0);
+          }
+          return 0;
+        })
+        .reduce((a, b) => a + b, 0);
 
+      // ---- TOTAL GASTO MES ----
+      const gastoMes = gastoCompras + gastoAsistencias;
 
-      // Acumulado meses anteriores (editable)
+      // Acumulado manual
       const acumuladoAnt =
         cuenta in acumuladosManual
           ? parseFloat(acumuladosManual[cuenta]) || 0
-          : presAnt - gastoAnt;
+          : 0;
 
       // Balance
       const balance = acumuladoAnt + presMes - gastoMes;
@@ -200,7 +139,6 @@ const EstadoCuentasResumen = ({ anio }) => {
         cuenta,
         acumuladoAnt,
         presMes,
-        presTotal,
         gastoMes,
         balance,
       };
@@ -221,6 +159,19 @@ const EstadoCuentasResumen = ({ anio }) => {
       [cuenta]: editValor
     }));
     setEditIdx(null);
+  };
+
+  // Abrir detalle modal
+  const abrirDetalle = (cuenta) => {
+    setDetalleCuenta(cuenta);
+    setModalOpen(true);
+  };
+
+  const cerrarDetalle = () => {
+    setModalOpen(false);
+    setTimeout(() => {
+      cargarResumen(); // Refresca el resumen tras cerrar el modal
+    }, 250);
   };
 
   return (
@@ -264,7 +215,6 @@ const EstadoCuentasResumen = ({ anio }) => {
                 <Th>Cuenta</Th>
                 <Th>Acumulado meses anteriores</Th>
                 <Th>Presupuesto {selectedMes}</Th>
-                <Th>Presupuesto total {selectedMes}</Th>
                 <Th>Gasto {selectedMes}</Th>
                 <Th>Balance</Th>
               </Tr>
@@ -306,8 +256,29 @@ const EstadoCuentasResumen = ({ anio }) => {
                     )}
                   </Td>
                   <Td>{fila.presMes.toLocaleString('es-ES', {style: 'currency', currency: 'EUR'})}</Td>
-                  <Td>{fila.presTotal.toLocaleString('es-ES', {style: 'currency', currency: 'EUR'})}</Td>
-                  <Td>{fila.gastoMes.toLocaleString('es-ES', {style: 'currency', currency: 'EUR'})}</Td>
+                  <Td>
+                    <Box
+                      as={motion.div}
+                      whileHover={{ scale: 1.05, backgroundColor: "#e3f2fd" }}
+                      whileTap={{ scale: 0.97 }}
+                      style={{
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        borderRadius: 6,
+                        padding: "0 0.5rem",
+                        minWidth: 110
+                      }}
+                      onClick={() => abrirDetalle(fila.cuenta)}
+                      title="Ver detalle de gastos"
+                    >
+                      <span style={{ color: "#1565c0", textDecoration: "underline" }}>
+                        {fila.gastoMes.toLocaleString('es-ES', {style: 'currency', currency: 'EUR'})}
+                      </span>
+                      <ExternalLinkIcon ml={2} color="gray.500" />
+                    </Box>
+                  </Td>
                   <Td
                     style={{
                       color: fila.balance >= 0 ? 'green' : 'red',
@@ -323,6 +294,35 @@ const EstadoCuentasResumen = ({ anio }) => {
           </Table>
         </Box>
       )}
+
+      {/* Modal de Detalle */}
+      <AnimatePresence>
+        {modalOpen && (
+          <Modal isOpen={modalOpen} onClose={cerrarDetalle} size="6xl" motionPreset="slideInBottom">
+            <ModalOverlay />
+            <ModalContent
+              as={motion.div}
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              transition={{ duration: 0.25 }}
+            >
+              <ModalHeader>Detalle de gastos - {detalleCuenta} - {selectedMes}</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <EstadoCuentasDetalles
+                  buque={selectedBuque}
+                  buqueNombre={buques.find(b => b.id === selectedBuque)?.nombre}
+                  cuenta={detalleCuenta}
+                  mesNum={meses.findIndex(m => m === selectedMes) + 1}
+                  anio={anio}
+                  onBack={cerrarDetalle}
+                />
+              </ModalBody>
+            </ModalContent>
+          </Modal>
+        )}
+      </AnimatePresence>
     </Box>
   );
 };
