@@ -20,6 +20,7 @@ import { saveAs } from "file-saver";
 import { supabase } from "../supabaseClient";
 import PresupuestoFijo from "./PresupuestoFijo";
 
+// Asegúrate de que estos arrays están actualizados con tus cuentas y meses
 const cuentas = [
   "Casco", "Máquinas", "Electricidad", "Electrónicas",
   "SEP", "Fonda", "MLC", "Aceite", "Inversiones",
@@ -30,19 +31,21 @@ const meses = [
   "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"
 ];
 
-const PresupuestoMensual = ({ anio, buque, buqueNombre, onVolver }) => {
+const PresupuestoMensual = ({ anio, buqueId, buqueNombre, onVolver }) => {
   const [datos, setDatos] = useState({});
   const [cargando, setCargando] = useState(true);
   const [refrescarFijo, setRefrescarFijo] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
+    if (!buqueId) return; // Control de buqueId no definido
+
     const cargarDatos = async () => {
       const { data, error } = await supabase
         .from("presupuesto_mensual")
         .select("*")
         .eq("anio", anio)
-        .eq("buque_id", buque); // 👈 El ID, no el nombre
+        .eq("buque_id", buqueId); // Usar buqueId (UUID)
 
       const estructura = {};
       cuentas.forEach((cuenta) => {
@@ -60,7 +63,7 @@ const PresupuestoMensual = ({ anio, buque, buqueNombre, onVolver }) => {
     };
 
     cargarDatos();
-  }, [anio, buque, refrescarFijo]);
+  }, [anio, buqueId, refrescarFijo]);
 
   const handleChange = (cuenta, mes, valor) => {
     setDatos((prev) => ({
@@ -77,7 +80,7 @@ const PresupuestoMensual = ({ anio, buque, buqueNombre, onVolver }) => {
     cuentas.forEach((cuenta) => {
       meses.forEach((mes) => {
         const valor = parseFloat(datos[cuenta][mes]) || 0;
-        registros.push({ anio, buque_id: buque, cuenta, mes, valor });
+        registros.push({ anio, buque_id: buqueId, cuenta, mes, valor }); // buque_id correcto
       });
     });
 
@@ -113,8 +116,7 @@ const PresupuestoMensual = ({ anio, buque, buqueNombre, onVolver }) => {
       datosExcel.push(fila);
     });
 
-    // Usa el nombre del buque si está disponible, si no el id
-    const nombreParaExcel = buqueNombre || buque;
+    const nombreParaExcel = buqueNombre || buqueId;
 
     const ws = XLSX.utils.json_to_sheet(datosExcel);
     const wb = XLSX.utils.book_new();
@@ -147,11 +149,21 @@ const PresupuestoMensual = ({ anio, buque, buqueNombre, onVolver }) => {
       0
     );
 
+  if (!buqueId) {
+    return (
+      <Box p={8}>
+        <Heading size="md" mb={4} color="red.500">
+          Selecciona un buque para ver el presupuesto mensual.
+        </Heading>
+      </Box>
+    );
+  }
+
   if (cargando) {
     return (
       <Box p={8}>
         <Heading size="md" mb={4}>
-          Cargando presupuesto mensual de {buqueNombre || buque} ({anio})...
+          Cargando presupuesto mensual de {buqueNombre || buqueId} ({anio})...
         </Heading>
         <Spinner size="lg" color="teal.500" />
       </Box>
@@ -162,7 +174,7 @@ const PresupuestoMensual = ({ anio, buque, buqueNombre, onVolver }) => {
     <Box>
       <HStack justify="space-between" mb={4}>
         <Heading size="md">
-          📅 Presupuesto mensual - {buqueNombre || buque} ({anio})
+          📅 Presupuesto mensual - {buqueNombre || buqueId} ({anio})
         </Heading>
         <Button onClick={onVolver} colorScheme="gray">
           ← Volver al resumen
@@ -237,7 +249,8 @@ const PresupuestoMensual = ({ anio, buque, buqueNombre, onVolver }) => {
       <Box mt={10}>
         <PresupuestoFijo
           anio={anio}
-          buque={buque}
+          buqueId={buqueId}
+          buqueNombre={buqueNombre}
           onRefrescar={() => setRefrescarFijo(!refrescarFijo)}
         />
       </Box>

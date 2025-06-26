@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Box,
   Heading,
@@ -10,35 +10,63 @@ import {
   Td,
   Input,
   Button,
-  IconButton,
   useToast,
   HStack,
+  Select,
 } from "@chakra-ui/react";
-import { DeleteIcon } from "@chakra-ui/icons";
 import { supabase } from "../supabaseClient";
 
-const meses = [
+// Nombres de columnas tal y como están en la BBDD
+const mesesDB = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
 ];
+// Nombres visuales (cortos)
+const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
-const PresupuestoFijo = ({ buque, anio }) => {
+const cuentasContables = [
+  "Casco",
+  "Máquinas",
+  "Electricidad",
+  "Electrónica",
+  "MLC",
+  "SEP",
+  "Fonda",
+  "Aceite",
+  "Otros",
+];
+
+const tiposGasto = [
+  { value: "Fijo", label: "Fijo" },
+  { value: "Estimado", label: "Estimado" },
+];
+
+const PresupuestoFijo = ({ buqueId, anio }) => {
   const [datosPedidos, setDatosPedidos] = useState([]);
   const [datosAsistencias, setDatosAsistencias] = useState([]);
+  const [menu, setMenu] = useState({ open: false, x: 0, y: 0, tabla: null, idx: null });
   const toast = useToast();
+  const boxRef = useRef();
+
+  // Cierra el menú contextual si haces clic fuera
+  useEffect(() => {
+    const handleClick = () => setMenu({ open: false, x: 0, y: 0, tabla: null, idx: null });
+    window.addEventListener("click", handleClick);
+    return () => window.removeEventListener("click", handleClick);
+  }, []);
 
   useEffect(() => {
     const cargarDatos = async () => {
       const { data: pedidos, error: errorPedidos } = await supabase
         .from("presupuestos_fijos_pedidos")
-        .select("tipo, " + meses.join(", "))
-        .eq("buque", buque)
+        .select("id, tipo, cuenta, tipo_gasto, " + mesesDB.join(", "))
+        .eq("buque_id", buqueId)
         .eq("anio", anio);
 
       const { data: asistencias, error: errorAsistencias } = await supabase
         .from("presupuestos_fijos_asistencias")
-        .select("tipo, " + meses.join(", "))
-        .eq("buque", buque)
+        .select("id, tipo, cuenta, tipo_gasto, " + mesesDB.join(", "))
+        .eq("buque_id", buqueId)
         .eq("anio", anio);
 
       if (errorPedidos || errorAsistencias) {
@@ -49,13 +77,21 @@ const PresupuestoFijo = ({ buque, anio }) => {
           duration: 3000,
         });
       } else {
-        setDatosPedidos(pedidos);
-        setDatosAsistencias(asistencias);
+        setDatosPedidos((pedidos || []).map(fila => ({
+          ...fila,
+          tipo_gasto: fila.tipo_gasto || "Fijo",
+          ...Object.fromEntries(mesesDB.map(mes => [mes, fila[mes] ?? ""]))
+        })));
+        setDatosAsistencias((asistencias || []).map(fila => ({
+          ...fila,
+          tipo_gasto: fila.tipo_gasto || "Fijo",
+          ...Object.fromEntries(mesesDB.map(mes => [mes, fila[mes] ?? ""]))
+        })));
       }
     };
 
     cargarDatos();
-  }, [buque, anio]);
+  }, [buqueId, anio]);
 
   const handleChange = (setDatos, datos, index, campo, valor) => {
     const nuevos = [...datos];
@@ -64,40 +100,64 @@ const PresupuestoFijo = ({ buque, anio }) => {
   };
 
   const handleAgregarFila = (setDatos) => {
-    const nuevaFila = { tipo: "" };
-    meses.forEach((mes) => (nuevaFila[mes] = ""));
+    const nuevaFila = { 
+      id: Date.now() + Math.random(),
+      tipo: "",
+      cuenta: "",
+      tipo_gasto: "Fijo"
+    };
+    mesesDB.forEach((mes) => (nuevaFila[mes] = ""));
     setDatos((prev) => [...prev, nuevaFila]);
   };
 
-  const handleEliminarFila = (setDatos, datos, index) => {
-    const nuevos = [...datos];
-    nuevos.splice(index, 1);
-    setDatos(nuevos);
+  const handleEliminarFila = (tabla, idx) => {
+    if (tabla === "pedidos") setDatosPedidos(prev => prev.filter((_, i) => i !== idx));
+    if (tabla === "asistencias") setDatosAsistencias(prev => prev.filter((_, i) => i !== idx));
+    setMenu({ open: false, x: 0, y: 0, tabla: null, idx: null });
   };
 
   const guardar = async () => {
+    // Helper para comprobar si un string es un uuid v4 válido (básico)
+    const isUUID = (str) =>
+      typeof str === "string" && str.length === 36 && /^[0-9a-f-]+$/.test(str) && str.includes("-");
+
     const registrosPedidos = datosPedidos.map((fila) => {
-      const registro = { buque, anio, tipo: fila.tipo };
-      meses.forEach((mes) => {
+      const registro = {
+        buque_id: buqueId,
+        anio,
+        tipo: fila.tipo,
+        cuenta: fila.cuenta,
+        tipo_gasto: fila.tipo_gasto || "Fijo" // O el valor por defecto que uses
+      };
+      mesesDB.forEach((mes) => {
         registro[mes] = parseFloat(fila[mes]) || 0;
       });
+      // Solo incluir el id si es uuid válido
+      if (isUUID(fila.id)) registro.id = fila.id;
       return registro;
     });
 
     const registrosAsistencias = datosAsistencias.map((fila) => {
-      const registro = { buque, anio, tipo: fila.tipo };
-      meses.forEach((mes) => {
+      const registro = {
+        buque_id: buqueId,
+        anio,
+        tipo: fila.tipo,
+        cuenta: fila.cuenta,
+        tipo_gasto: fila.tipo_gasto || "Fijo"
+      };
+      mesesDB.forEach((mes) => {
         registro[mes] = parseFloat(fila[mes]) || 0;
       });
+      if (isUUID(fila.id)) registro.id = fila.id;
       return registro;
     });
 
     const [{ error: errorPedidos }, { error: errorAsistencias }] = await Promise.all([
       supabase.from("presupuestos_fijos_pedidos").upsert(registrosPedidos, {
-        onConflict: ["buque", "anio", "tipo"],
+        onConflict: ["buque_id", "anio", "tipo", "cuenta"],
       }),
       supabase.from("presupuestos_fijos_asistencias").upsert(registrosAsistencias, {
-        onConflict: ["buque", "anio", "tipo"],
+        onConflict: ["buque_id", "anio", "tipo", "cuenta"],
       }),
     ]);
 
@@ -111,54 +171,134 @@ const PresupuestoFijo = ({ buque, anio }) => {
       toast({ title: "Presupuesto fijo guardado correctamente", status: "success" });
     }
   };
-
-  const renderTabla = (titulo, datos, setDatos, tipo) => (
-    <Box mt={10}>
-      <Heading size="sm" mb={2}>{titulo}</Heading>
-      <Table size="sm" variant="simple">
-        <Thead>
-          <Tr>
-            <Th>Tipo {tipo}</Th>
-            {meses.map((mes) => (
-              <Th key={mes} isNumeric>{mes.charAt(0).toUpperCase() + mes.slice(1)}</Th>
-            ))}
-            <Th></Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {datos.map((fila, i) => (
-            <Tr key={i}>
-              <Td>
-                <Input
-                  value={fila.tipo || ""}
-                  onChange={(e) => handleChange(setDatos, datos, i, "tipo", e.target.value)}
-                  size="sm"
-                />
-              </Td>
-              {meses.map((mes) => (
-                <Td key={mes} isNumeric>
+  
+  const renderTabla = (titulo, datos, setDatos, tipo, tablaKey) => (
+    <Box
+      mt={10}
+      bg="gray.50"
+      borderRadius="xl"
+      boxShadow="base"
+      p={4}
+      overflowX="auto"
+      maxW="100%"
+      ref={boxRef}
+      position="relative"
+    >
+      <Box minW="1200px">
+        <Heading size="sm" mb={2}>{titulo}</Heading>
+        <Table size="sm" variant="striped" colorScheme="teal" borderRadius="xl">
+          <Thead>
+            <Tr>
+              <Th fontSize="sm">TIPO {tipo.toUpperCase()}</Th>
+              <Th fontSize="sm">CUENTA</Th>
+              <Th fontSize="sm">TIPO DE GASTO</Th>
+              {meses.map((mes, idx) => (
+                <Th key={mes} isNumeric fontSize="sm">{mes}</Th>
+              ))}
+            </Tr>
+          </Thead>
+          <Tbody>
+            {datos.map((fila, i) => (
+              <Tr key={fila.id || i} _hover={{ bg: "teal.50" }}>
+                <Td
+                  bg="white"
+                  style={{ cursor: "context-menu", userSelect: "none" }}
+                  onContextMenu={e => {
+                    e.preventDefault();
+                    setMenu({ open: true, x: e.clientX, y: e.clientY, tabla: tablaKey, idx: i });
+                  }}
+                >
                   <Input
-                    value={fila[mes] || ""}
-                    onChange={(e) => handleChange(setDatos, datos, i, mes, e.target.value)}
+                    placeholder="Ej: Contrato IT"
+                    value={fila.tipo || ""}
+                    onChange={(e) => handleChange(setDatos, datos, i, "tipo", e.target.value)}
                     size="sm"
-                    textAlign="right"
-                    type="number"
+                    w="auto"
+                    borderRadius="lg"
                   />
                 </Td>
-              ))}
-              <Td>
-                <IconButton
-                  size="sm"
-                  icon={<DeleteIcon />}
-                  onClick={() => handleEliminarFila(setDatos, datos, i)}
-                  aria-label="Eliminar fila"
-                />
-              </Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
-      <Button mt={2} size="sm" onClick={() => handleAgregarFila(setDatos)}>
+                <Td bg="white">
+                  <Select
+                    value={fila.cuenta || ""}
+                    onChange={(e) => handleChange(setDatos, datos, i, "cuenta", e.target.value)}
+                    size="sm"
+                    placeholder="Selecciona"
+                    minW="85px"
+                    maxW="110px"
+                    borderRadius="lg"
+                  >
+                    {cuentasContables.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </Select>
+                </Td>
+                <Td bg="white">
+                  <Select
+                    value={fila.tipo_gasto || "Fijo"}
+                    onChange={(e) => handleChange(setDatos, datos, i, "tipo_gasto", e.target.value)}
+                    size="sm"
+                    bg={fila.tipo_gasto === "Estimado" ? "orange.50" : "blue.50"}
+                    color={fila.tipo_gasto === "Estimado" ? "orange.800" : "blue.800"}
+                    fontWeight="bold"
+                    minW="110px"
+                    maxW="130px"
+                    borderRadius="lg"
+                  >
+                    {tiposGasto.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                </Td>
+                {mesesDB.map((mes, idx) => (
+                  <Td key={mes} bg="white" isNumeric>
+                    <Input
+                      value={fila[mes] || ""}
+                      onChange={(e) => handleChange(setDatos, datos, i, mes, e.target.value)}
+                      size="sm"
+                      textAlign="right"
+                      type="number"
+                      borderRadius="lg"
+                      minW="50px"
+                      placeholder="0"
+                    />
+                  </Td>
+                ))}
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+        {menu.open && menu.tabla === tablaKey && (
+          <Box
+            position="fixed"
+            zIndex={10}
+            left={menu.x}
+            top={menu.y}
+            bg="white"
+            boxShadow="xl"
+            borderRadius="md"
+            border="1px solid #eee"
+            minW="130px"
+            p={1}
+          >
+            <Button
+              colorScheme="red"
+              variant="ghost"
+              size="sm"
+              w="100%"
+              onClick={() => handleEliminarFila(menu.tabla, menu.idx)}
+            >
+              Eliminar fila
+            </Button>
+          </Box>
+        )}
+      </Box>
+      <Button
+        mt={4}
+        size="sm"
+        onClick={() => handleAgregarFila(setDatos)}
+        colorScheme="teal"
+        borderRadius="xl"
+      >
         ➕ Añadir tipo {tipo}
       </Button>
     </Box>
@@ -166,8 +306,8 @@ const PresupuestoFijo = ({ buque, anio }) => {
 
   return (
     <Box mt={10}>
-      {renderTabla("Presupuesto fijo - Pedidos", datosPedidos, setDatosPedidos, "pedido")}
-      {renderTabla("Presupuesto fijo - Asistencias", datosAsistencias, setDatosAsistencias, "asistencia")}
+      {renderTabla("Presupuesto fijo - Pedidos", datosPedidos, setDatosPedidos, "pedido", "pedidos")}
+      {renderTabla("Presupuesto fijo - Asistencias", datosAsistencias, setDatosAsistencias, "asistencia", "asistencias")}
       <HStack justify="flex-end" mt={6}>
         <Button colorScheme="green" onClick={guardar}>Guardar todo</Button>
       </HStack>

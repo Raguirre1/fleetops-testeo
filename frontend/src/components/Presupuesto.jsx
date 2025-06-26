@@ -72,7 +72,7 @@ const Presupuesto = () => {
     };
 
     cargarPresupuestos();
-  }, [buques]); // recarga si cambian los buques
+  }, [buques]);
 
   const crearNuevoPresupuesto = () => {
     const nuevoAño = anios.length > 0 ? Math.max(...anios) + 1 : 2025;
@@ -108,7 +108,7 @@ const Presupuesto = () => {
     cuentas.forEach((cuenta) => {
       buques.forEach((buque) => {
         const valor = parseFloat(presupuestos[año][cuenta][buque.id]) || 0;
-        registros.push({ anio: año, cuenta, buque_id: buque.id, valor });
+        registros.push({ anio: año, cuenta, buque_id: buque.id, valor }); // 👈 buque_id
       });
     });
 
@@ -149,8 +149,8 @@ const Presupuesto = () => {
     return (
       <PresupuestoMensual
         anio={vistaMensual.año}
-        buque={buqueObj.id}           // <-- Solo el ID aquí
-        buqueNombre={buqueObj.nombre} // <-- Opcional: para mostrar en el título
+        buqueId={buqueObj.id}           // 👈 buqueId (UUID)
+        buqueNombre={buqueObj.nombre}   // Nombre opcional para mostrar
         onVolver={() => setVistaMensual(null)}
       />
     );
@@ -248,7 +248,7 @@ const Presupuesto = () => {
                         isNumeric
                         cursor="pointer"
                         _hover={{ bg: "teal.200" }}
-                        onClick={() => setVistaMensual({ año, buqueId: buque.id })}
+                        onClick={() => setVistaMensual({ año, buqueId: buque.id })} // 👈 pasa buqueId
                         title={`Ver mensualización de ${buque.nombre}`}
                       >
                         {buque.nombre}
