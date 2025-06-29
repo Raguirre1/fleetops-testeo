@@ -11,6 +11,7 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
+import LogoFleetOps from "./LogoFleetOps"; // Ajusta la ruta si está en otro sitio
 
 const Login = ({ onLoginSuccess }) => {
   const [nombre, setNombre] = useState("");
@@ -81,6 +82,9 @@ const Login = ({ onLoginSuccess }) => {
   return (
     <Flex align="center" justify="center" minH="100vh" bg="gray.100">
       <Box bg="white" p={8} rounded="md" shadow="md" w="full" maxW="sm">
+        <Flex justify="center" mb={6}>
+          <LogoFleetOps height={300} />
+        </Flex>
         <Heading as="h2" size="lg" mb={6} textAlign="center">
           Iniciar sesión
         </Heading>

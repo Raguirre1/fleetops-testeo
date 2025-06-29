@@ -40,3 +40,23 @@
 .read-the-docs {
   color: #888;
 }
+
+/* --- Animación FleetOps logo (solo login) --- */
+@keyframes fadeZoom {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.07);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.logo-fleetops {
+  animation: fadeZoom 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+}
