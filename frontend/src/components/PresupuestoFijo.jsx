@@ -38,7 +38,7 @@ const cuentasContables = [
 
 const tiposGasto = [
   { value: "Fijo", label: "Fijo" },
-  { value: "Estimado", label: "Estimado" },
+  { value: "Planificado", label: "Planificado" },
 ];
 
 const PresupuestoFijo = ({ buqueId, anio }) => {
@@ -101,7 +101,7 @@ const PresupuestoFijo = ({ buqueId, anio }) => {
 
   const handleAgregarFila = (setDatos) => {
     const nuevaFila = { 
-      id: Date.now() + Math.random(),
+      // No incluimos id aquí, se generará en la BBDD para nuevas filas
       tipo: "",
       cuenta: "",
       tipo_gasto: "Fijo"
@@ -116,28 +116,15 @@ const PresupuestoFijo = ({ buqueId, anio }) => {
     setMenu({ open: false, x: 0, y: 0, tabla: null, idx: null });
   };
 
+  // Helper para comprobar si un string es un uuid v4 válido (básico)
+  const isUUID = (str) =>
+    typeof str === "string" && str.length === 36 && /^[0-9a-f-]+$/.test(str) && str.includes("-");
+
   const guardar = async () => {
-    // Helper para comprobar si un string es un uuid v4 válido (básico)
     const isUUID = (str) =>
       typeof str === "string" && str.length === 36 && /^[0-9a-f-]+$/.test(str) && str.includes("-");
 
-    const registrosPedidos = datosPedidos.map((fila) => {
-      const registro = {
-        buque_id: buqueId,
-        anio,
-        tipo: fila.tipo,
-        cuenta: fila.cuenta,
-        tipo_gasto: fila.tipo_gasto || "Fijo" // O el valor por defecto que uses
-      };
-      mesesDB.forEach((mes) => {
-        registro[mes] = parseFloat(fila[mes]) || 0;
-      });
-      // Solo incluir el id si es uuid válido
-      if (isUUID(fila.id)) registro.id = fila.id;
-      return registro;
-    });
-
-    const registrosAsistencias = datosAsistencias.map((fila) => {
+    const preparar = (fila) => {
       const registro = {
         buque_id: buqueId,
         anio,
@@ -148,18 +135,23 @@ const PresupuestoFijo = ({ buqueId, anio }) => {
       mesesDB.forEach((mes) => {
         registro[mes] = parseFloat(fila[mes]) || 0;
       });
-      if (isUUID(fila.id)) registro.id = fila.id;
+      if (fila.id && isUUID(fila.id)) registro.id = fila.id;
       return registro;
-    });
+    };
 
-    const [{ error: errorPedidos }, { error: errorAsistencias }] = await Promise.all([
-      supabase.from("presupuestos_fijos_pedidos").upsert(registrosPedidos, {
-        onConflict: ["buque_id", "anio", "tipo", "cuenta"],
-      }),
-      supabase.from("presupuestos_fijos_asistencias").upsert(registrosAsistencias, {
-        onConflict: ["buque_id", "anio", "tipo", "cuenta"],
-      }),
-    ]);
+    const registrosPedidos = datosPedidos.map(preparar);
+    const registrosAsistencias = datosAsistencias.map(preparar);
+
+    let errorPedidos, errorAsistencias;
+
+    // 🔴 Aquí el onConflict va con el conjunto UNIQUE
+    ({ error: errorPedidos } = await supabase
+      .from("presupuestos_fijos_pedidos")
+      .upsert(registrosPedidos, { onConflict: ["buque_id", "anio", "tipo", "cuenta"] }));
+
+    ({ error: errorAsistencias } = await supabase
+      .from("presupuestos_fijos_asistencias")
+      .upsert(registrosAsistencias, { onConflict: ["buque_id", "anio", "tipo", "cuenta"] }));
 
     if (errorPedidos || errorAsistencias) {
       toast({
@@ -171,6 +163,7 @@ const PresupuestoFijo = ({ buqueId, anio }) => {
       toast({ title: "Presupuesto fijo guardado correctamente", status: "success" });
     }
   };
+
   
   const renderTabla = (titulo, datos, setDatos, tipo, tablaKey) => (
     <Box
@@ -237,8 +230,8 @@ const PresupuestoFijo = ({ buqueId, anio }) => {
                     value={fila.tipo_gasto || "Fijo"}
                     onChange={(e) => handleChange(setDatos, datos, i, "tipo_gasto", e.target.value)}
                     size="sm"
-                    bg={fila.tipo_gasto === "Estimado" ? "orange.50" : "blue.50"}
-                    color={fila.tipo_gasto === "Estimado" ? "orange.800" : "blue.800"}
+                    bg={fila.tipo_gasto === "Planificado" ? "orange.50" : "blue.50"}
+                    color={fila.tipo_gasto === "Planificado" ? "orange.800" : "blue.800"}
                     fontWeight="bold"
                     minW="110px"
                     maxW="130px"

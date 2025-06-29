@@ -410,7 +410,11 @@ const PurchaseRequest = ({ usuario, onBack }) => {
                 <Td>{s.fecha_pedido?.split("T")[0]}</Td>
                 <Td>{s.fecha_entrega?.split("T")[0] || "-"}</Td>
                 <Td>{s.usuario}</Td>
-                <Td>{s.estado === "Pedido Activo" ? "Pedido Activo ✅" : s.estado || "Solicitud de Compra"}</Td>
+                <Td>
+                  {s.estado === "Pedido Activo" ? "Pedido Activo ✅"
+                  : s.estado === "Cancelado" ? <span style={{color: "red", fontWeight: 700}}>Cancelado</span>
+                  : s.estado || "Solicitud de Compra"}
+                </Td>
                 <Td>{s.fecha_estado?.split("T")[0] || "-"}</Td>
                 <Td>{s.numero_cuenta || "-"}</Td>
                 <Td>{estadosPago[s.numero_pedido] || "-"}</Td>
@@ -434,8 +438,18 @@ const PurchaseRequest = ({ usuario, onBack }) => {
                     <Menu>
                       <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
                       <MenuList>
-                        {["Solicitud de Compra", "En Consulta", "Pedido Activo", "Recibido"].map((estado) => (
-                          <MenuItem key={estado} onClick={() => actualizarEstado(s.numero_pedido, estado)}>
+                        {[
+                          "Solicitud de Compra",
+                          "En Consulta",
+                          "Pedido Activo",
+                          "Recibido",
+                          "Cancelado", // <-- Añadido aquí
+                        ].map((estado) => (
+                          <MenuItem
+                            key={estado}
+                            onClick={() => actualizarEstado(s.numero_pedido, estado)}
+                            color={estado === "Cancelado" ? "red.500" : "inherit"} // Rojo si es Cancelado
+                          >
                             {estado}
                           </MenuItem>
                         ))}

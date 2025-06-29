@@ -13,18 +13,27 @@ import {
   Button,
   Input,
   useToast,
-  Flex
+  Flex,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
 } from "@chakra-ui/react";
 import { DownloadIcon } from "@chakra-ui/icons";
 import { supabase } from "../supabaseClient";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
-// Puedes recibir cuentas como prop, o dejarlas fijas aquí
 const cuentas = [
   "Casco", "Máquinas", "Electricidad", "Electrónicas",
   "SEP", "Fonda", "MLC", "Aceite", "Inversiones",
 ];
+
+const mesesDB = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+];
+const mesesCorto = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBack }) => {
   const [gastos, setGastos] = useState([]);
@@ -32,6 +41,8 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
   const [ordenCampo, setOrdenCampo] = useState("valor");
   const [ordenDireccion, setOrdenDireccion] = useState("desc");
   const [busqueda, setBusqueda] = useState("");
+  const [gastosFijos, setGastosFijos] = useState([]);
+  const [gastosPlanificados, setGastosPlanificados] = useState([]);
   const toast = useToast();
 
   // --- Cargar gastos pedidos y asistencias ---
@@ -62,12 +73,12 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     const lista = [];
 
     // Gastos de pedidos
-    pedidos.forEach((pedido) => {
+    pedidos?.forEach((pedido) => {
       if (
         pedido.buque_id === buque &&
         pedido.numero_cuenta === cuenta
       ) {
-        cotizaciones.forEach((cot) => {
+        cotizaciones?.forEach((cot) => {
           if (
             cot.numero_pedido === pedido.numero_pedido &&
             cot.valor &&
@@ -91,12 +102,12 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     });
 
     // Gastos de asistencias
-    asistencias.forEach((asistencia) => {
+    asistencias?.forEach((asistencia) => {
       if (
         asistencia.buque_id === buque &&
         asistencia.numero_cuenta === cuenta
       ) {
-        cotizacionesAsist.forEach((cot) => {
+        cotizacionesAsist?.forEach((cot) => {
           if (
             cot.numero_asistencia === asistencia.numero_ate &&
             cot.valor &&
@@ -123,8 +134,40 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     setLoading(false);
   };
 
+  // --- Cargar gastos fijos y planificados ---
+  const cargarPresupuestoFijo = async () => {
+    // Calcular el nombre de columna del mes (enero, febrero...)
+    const mesStr = mesesDB[mesNum - 1];
+
+    // Traer Fijos y Planificados de ambas tablas
+    const [{ data: fijosPedidos }, { data: fijosAsistencias }] = await Promise.all([
+      supabase.from("presupuestos_fijos_pedidos")
+        .select(`id, tipo, cuenta, tipo_gasto, ${mesStr}`)
+        .eq("buque_id", buque)
+        .eq("anio", anio)
+        .eq("cuenta", cuenta)
+        .or("tipo_gasto.eq.Fijo,tipo_gasto.eq.Planificado"),
+      supabase.from("presupuestos_fijos_asistencias")
+        .select(`id, tipo, cuenta, tipo_gasto, ${mesStr}`)
+        .eq("buque_id", buque)
+        .eq("anio", anio)
+        .eq("cuenta", cuenta)
+        .or("tipo_gasto.eq.Fijo,tipo_gasto.eq.Planificado"),
+    ]);
+
+    // Unifica resultados y separa por tipo_gasto
+    const todos = [...(fijosPedidos || []), ...(fijosAsistencias || [])].map(e => ({
+      ...e,
+      valor: Number(e[mesStr]) || 0
+    }));
+
+    setGastosFijos(todos.filter(g => g.tipo_gasto === "Fijo" && g.valor > 0));
+    setGastosPlanificados(todos.filter(g => g.tipo_gasto === "Planificado" && g.valor > 0));
+  };
+
   useEffect(() => {
     cargarGastos();
+    cargarPresupuestoFijo();
     // eslint-disable-next-line
   }, [buque, cuenta, mesNum, anio]);
 
@@ -139,6 +182,19 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
       "Cuenta contable": g.cuenta,
       Fecha: g.fecha ? new Date(g.fecha).toLocaleDateString() : "",
     }));
+
+    // Añadir los fijos como fila extra
+    gastosFijos.forEach((fijo) => {
+      datos.push({
+        Tipo: "Gasto Fijo",
+        Proveedor: "-",
+        "Nº Referencia": "-",
+        Título: fijo.tipo || "",
+        "Valor (€)": fijo.valor,
+        "Cuenta contable": fijo.cuenta || "",
+        Fecha: "-",
+      });
+    });
 
     const ws = XLSX.utils.json_to_sheet(datos);
     const wb = XLSX.utils.book_new();
@@ -214,10 +270,14 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
       : (valB || "").toString().localeCompare((valA || "").toString());
   });
 
+  // --- Suma total gastos + fijos ---
+  const sumaGastos = gastosOrdenados.reduce((a, b) => a + (Number(b.valor) || 0), 0);
+  const sumaFijos = gastosFijos.reduce((a, b) => a + (Number(b.valor) || 0), 0);
+
   return (
     <Box p={6}>
       <Heading size="lg" mb={4}>
-        📋 Detalle de gastos - {buqueNombre || buque} / {cuenta} / {mesNum}-{anio}
+        📋 Detalle de gastos - {buqueNombre || buque} / {cuenta} / {mesesCorto[mesNum-1]}-{anio}
       </Heading>
 
       <Flex mb={4} gap={3} align="center">
@@ -235,61 +295,100 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
 
       {loading ? (
         <Spinner size="xl" />
-      ) : gastosOrdenados.length === 0 ? (
-        <Box>No hay gastos registrados para este mes/cuenta.</Box>
       ) : (
-        <Box overflowX="auto">
-          <Table variant="striped" colorScheme="gray" size="sm">
-            <Thead>
-              <Tr>
-                <Th onClick={() => cambiarOrden("tipo")} cursor="pointer">
-                  Tipo {ordenCampo === "tipo" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
-                </Th>
-                <Th onClick={() => cambiarOrden("proveedor")} cursor="pointer">
-                  Proveedor {ordenCampo === "proveedor" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
-                </Th>
-                <Th onClick={() => cambiarOrden("referencia")} cursor="pointer">
-                  Nº Referencia {ordenCampo === "referencia" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
-                </Th>
-                <Th onClick={() => cambiarOrden("titulo")} cursor="pointer">
-                  Título {ordenCampo === "titulo" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
-                </Th>
-                <Th isNumeric onClick={() => cambiarOrden("valor")} cursor="pointer">
-                  Valor (€) {ordenCampo === "valor" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
-                </Th>
-                <Th>
-                  Cuenta contable
-                </Th>
-                <Th onClick={() => cambiarOrden("fecha")} cursor="pointer">
-                  Fecha {ordenCampo === "fecha" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
-                </Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {gastosOrdenados.map((g, index) => (
-                <Tr key={`${g.referencia}-${index}`}>
-                  <Td>{g.tipo}</Td>
-                  <Td>{g.proveedor}</Td>
-                  <Td>{g.referencia}</Td>
-                  <Td>{g.titulo}</Td>
-                  <Td isNumeric>{Number(g.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</Td>
-                  <Td>
-                    <Select
-                      value={g.cuenta}
-                      onChange={(e) => handleCuentaChange(g.referencia, g.tipo, e.target.value)}
-                      size="sm"
-                    >
-                      {cuentas.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </Select>
-                  </Td>
-                  <Td>{g.fecha ? new Date(g.fecha).toLocaleDateString() : ""}</Td>
+        <>
+          <Box overflowX="auto">
+            <Table variant="striped" colorScheme="gray" size="sm">
+              <Thead>
+                <Tr>
+                  <Th onClick={() => cambiarOrden("tipo")} cursor="pointer">
+                    Tipo {ordenCampo === "tipo" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
+                  </Th>
+                  <Th onClick={() => cambiarOrden("proveedor")} cursor="pointer">
+                    Proveedor {ordenCampo === "proveedor" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
+                  </Th>
+                  <Th onClick={() => cambiarOrden("referencia")} cursor="pointer">
+                    Nº Referencia {ordenCampo === "referencia" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
+                  </Th>
+                  <Th onClick={() => cambiarOrden("titulo")} cursor="pointer">
+                    Título {ordenCampo === "titulo" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
+                  </Th>
+                  <Th isNumeric onClick={() => cambiarOrden("valor")} cursor="pointer">
+                    Valor (€) {ordenCampo === "valor" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
+                  </Th>
+                  <Th>
+                    Cuenta contable
+                  </Th>
+                  <Th onClick={() => cambiarOrden("fecha")} cursor="pointer">
+                    Fecha {ordenCampo === "fecha" ? (ordenDireccion === "asc" ? "🔼" : "🔽") : ""}
+                  </Th>
                 </Tr>
-              ))}
-            </Tbody>
-          </Table>
-        </Box>
+              </Thead>
+              <Tbody>
+                {gastosOrdenados.map((g, index) => (
+                  <Tr key={`${g.referencia}-${index}`}>
+                    <Td>{g.tipo}</Td>
+                    <Td>{g.proveedor}</Td>
+                    <Td>{g.referencia}</Td>
+                    <Td>{g.titulo}</Td>
+                    <Td isNumeric>{Number(g.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</Td>
+                    <Td>
+                      <Select
+                        value={g.cuenta}
+                        onChange={(e) => handleCuentaChange(g.referencia, g.tipo, e.target.value)}
+                        size="sm"
+                      >
+                        {cuentas.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </Select>
+                    </Td>
+                    <Td>{g.fecha ? new Date(g.fecha).toLocaleDateString() : ""}</Td>
+                  </Tr>
+                ))}
+                {gastosFijos.length > 0 && gastosFijos.map((fijo, idx) => (
+                  <Tr key={`fijo-${idx}`} bg="blue.50">
+                    <Td fontWeight="bold" colSpan={3}>Gasto Fijo Presupuestado</Td>
+                    <Td>{fijo.tipo}</Td>
+                    <Td isNumeric fontWeight="bold" color="blue.700">
+                      {Number(fijo.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                    </Td>
+                    <Td colSpan={2} />
+                  </Tr>
+                ))}
+                {(gastosOrdenados.length > 0 || gastosFijos.length > 0) && (
+                  <Tr>
+                    <Td colSpan={4} fontWeight="bold" textAlign="right">Total (incluye Gastos Fijos)</Td>
+                    <Td isNumeric fontWeight="bold">
+                      {(sumaGastos + sumaFijos).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                    </Td>
+                    <Td colSpan={2} />
+                  </Tr>
+                )}
+              </Tbody>
+            </Table>
+          </Box>
+          {/* Cuadro de avisos para gastos planificados */}
+          {gastosPlanificados.length > 0 && (
+            <Alert status="info" mt={6} borderRadius="md" variant="left-accent">
+              <AlertIcon />
+              <Box>
+                <AlertTitle>Gastos Planificados para este mes</AlertTitle>
+                <AlertDescription>
+                  {gastosPlanificados.map((plan, i) => (
+                    <Box key={i}>
+                      <b>{plan.tipo}</b>:&nbsp;
+                      {Number(plan.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                    </Box>
+                  ))}
+                  <Box fontStyle="italic" mt={2} color="gray.600">
+                    (No restan en los totales hasta que se ejecuten como pedido o asistencia)
+                  </Box>
+                </AlertDescription>
+              </Box>
+            </Alert>
+          )}
+        </>
       )}
     </Box>
   );

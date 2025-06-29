@@ -1,4 +1,3 @@
-// PedidosArchivados.jsx
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -12,14 +11,17 @@ import {
   Button,
   useToast,
   Tooltip,
-  Flex
+  Flex,
+  Input,
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
 
 const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
   const [pedidos, setPedidos] = useState([]);
   const [estadoFactura, setEstadoFactura] = useState({});
-  const [diccionarioBuques, setDiccionarioBuques] = useState({});
+  const [filtro, setFiltro] = useState("");
+  const [ordenCampo, setOrdenCampo] = useState(null);
+  const [ordenAscendente, setOrdenAscendente] = useState(true);
   const toast = useToast();
 
   const cargarArchivados = async () => {
@@ -67,6 +69,30 @@ const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
     cargarEstadoFacturas();
   }, []);
 
+  // Filtro de búsqueda
+  const pedidosFiltrados = pedidos.filter((p) => {
+    const texto = filtro.toLowerCase();
+    return (
+      p.numero_pedido?.toLowerCase().includes(texto) ||
+      p.titulo_pedido?.toLowerCase().includes(texto) ||
+      p.usuario?.toLowerCase().includes(texto) ||
+      (p.estado || "").toLowerCase().includes(texto)
+    );
+  });
+
+  // Ordenar al hacer click en la cabecera
+  const ordenarPorCampo = (campo) => {
+    const asc = ordenCampo === campo ? !ordenAscendente : true;
+    const pedidosOrdenados = [...pedidosFiltrados].sort((a, b) => {
+      let valorA = a[campo] || "";
+      let valorB = b[campo] || "";
+      return asc ? valorA.localeCompare(valorB) : valorB.localeCompare(valorA);
+    });
+    setOrdenCampo(campo);
+    setOrdenAscendente(asc);
+    setPedidos(pedidosOrdenados);
+  };
+
   return (
     <Box p={6}>
       <Flex justify="space-between" align="center" mb={4}>
@@ -75,55 +101,68 @@ const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
           Volver a pedidos activos
         </Button>
       </Flex>
-
+      <Flex mb={3} gap={2} align="center">
+        <Input
+          placeholder="Buscar pedido, título, usuario o estado"
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          size="sm"
+          maxW="300px"
+        />
+      </Flex>
       <Table variant="simple" size="sm">
-      <Thead>
-        <Tr>
-          <Th>Nº Pedido</Th>
-          <Th>Título</Th>
-          {/* <Th>Buque</Th> <-- ELIMINADA */}
-          <Th>Usuario</Th>
-          <Th>Estado</Th>
-          <Th>Factura</Th>
-          <Th>Acciones</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {pedidos.map((p) => (
-          <Tr key={p.numero_pedido}>
-            <Td fontWeight="bold">{p.numero_pedido}</Td>
-            <Td>{p.titulo_pedido}</Td>
-            {/* <Td>{p.buque}</Td> <-- ELIMINADA */}
-            <Td>{p.usuario}</Td>
-            <Td>{p.estado || "-"}</Td>
-            <Td>
-              {estadoFactura[p.numero_pedido] ? (
-                <Tooltip label="Falta cargar la factura final" hasArrow>
-                  <span>🟡</span>
-                </Tooltip>
-              ) : (
-                "✅"
-              )}
-            </Td>
-            <Td>
-              <Flex gap={1}>
-                <Tooltip label="Desarchivar pedido" hasArrow>
-                  <Button size="xs" onClick={() => desarchivarPedido(p.numero_pedido)}>
-                    🔁 Desarchivar
-                  </Button>
-                </Tooltip>
-                <Tooltip label="Ver detalles del pedido" hasArrow>
-                  <Button size="xs" onClick={() => onVerDetalle(p)}>
-                    🔍 Ver
-                  </Button>
-                </Tooltip>
-              </Flex>
-            </Td>
+        <Thead>
+          <Tr>
+            <Th cursor="pointer" onClick={() => ordenarPorCampo("numero_pedido")}>
+              Nº Pedido {ordenCampo === "numero_pedido" ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+            </Th>
+            <Th cursor="pointer" onClick={() => ordenarPorCampo("titulo_pedido")}>
+              Título {ordenCampo === "titulo_pedido" ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+            </Th>
+            <Th cursor="pointer" onClick={() => ordenarPorCampo("usuario")}>
+              Usuario {ordenCampo === "usuario" ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+            </Th>
+            <Th cursor="pointer" onClick={() => ordenarPorCampo("estado")}>
+              Estado {ordenCampo === "estado" ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+            </Th>
+            <Th>Factura</Th>
+            <Th>Acciones</Th>
           </Tr>
-        ))}
-      </Tbody>
-    </Table>
-
+        </Thead>
+        <Tbody>
+          {pedidosFiltrados.map((p) => (
+            <Tr key={p.numero_pedido}>
+              <Td fontWeight="bold">{p.numero_pedido}</Td>
+              <Td>{p.titulo_pedido}</Td>
+              <Td>{p.usuario}</Td>
+              <Td>{p.estado || "-"}</Td>
+              <Td>
+                {estadoFactura[p.numero_pedido] ? (
+                  <Tooltip label="Falta cargar la factura final" hasArrow>
+                    <span>🟡</span>
+                  </Tooltip>
+                ) : (
+                  "✅"
+                )}
+              </Td>
+              <Td>
+                <Flex gap={1}>
+                  <Tooltip label="Desarchivar pedido" hasArrow>
+                    <Button size="xs" onClick={() => desarchivarPedido(p.numero_pedido)}>
+                      🔁 Desarchivar
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Ver detalles del pedido" hasArrow>
+                    <Button size="xs" onClick={() => onVerDetalle(p)}>
+                      🔍 Ver
+                    </Button>
+                  </Tooltip>
+                </Flex>
+              </Td>
+            </Tr>
+          ))}
+        </Tbody>
+      </Table>
     </Box>
   );
 };

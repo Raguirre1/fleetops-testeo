@@ -1,4 +1,3 @@
-// AsistenciaArchivadas.jsx
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -13,12 +12,16 @@ import {
   useToast,
   Tooltip,
   Flex,
+  Input,
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
 
 const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
   const [asistencias, setAsistencias] = useState([]);
   const [estadoFactura, setEstadoFactura] = useState({});
+  const [filtro, setFiltro] = useState("");
+  const [ordenCampo, setOrdenCampo] = useState(null);
+  const [ordenAscendente, setOrdenAscendente] = useState(true);
   const toast = useToast();
 
   const cargarArchivadas = async () => {
@@ -66,6 +69,30 @@ const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
     cargarEstadoFacturas();
   }, []);
 
+  // Filtro de búsqueda
+  const asistenciasFiltradas = asistencias.filter((a) => {
+    const texto = filtro.toLowerCase();
+    return (
+      a.numero_ate?.toLowerCase().includes(texto) ||
+      a.titulo_ate?.toLowerCase().includes(texto) ||
+      a.usuario?.toLowerCase().includes(texto) ||
+      (a.estado || "").toLowerCase().includes(texto)
+    );
+  });
+
+  // Ordenar al hacer click en la cabecera
+  const ordenarPorCampo = (campo) => {
+    const asc = ordenCampo === campo ? !ordenAscendente : true;
+    const asistenciasOrdenadas = [...asistenciasFiltradas].sort((a, b) => {
+      let valorA = a[campo] || "";
+      let valorB = b[campo] || "";
+      return asc ? valorA.localeCompare(valorB) : valorB.localeCompare(valorA);
+    });
+    setOrdenCampo(campo);
+    setOrdenAscendente(asc);
+    setAsistencias(asistenciasOrdenadas);
+  };
+
   return (
     <Box p={6}>
       <Flex justify="space-between" align="center" mb={4}>
@@ -74,20 +101,36 @@ const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
           Volver a asistencias activas
         </Button>
       </Flex>
-
+      <Flex mb={3} gap={2} align="center">
+        <Input
+          placeholder="Buscar asistencia, título, usuario o estado"
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          size="sm"
+          maxW="300px"
+        />
+      </Flex>
       <Table variant="simple" size="sm">
         <Thead>
           <Tr>
-            <Th>Nº Asistencia</Th>
-            <Th>Título</Th>
-            <Th>Usuario</Th>
-            <Th>Estado</Th>
+            <Th cursor="pointer" onClick={() => ordenarPorCampo("numero_ate")}>
+              Nº Asistencia {ordenCampo === "numero_ate" ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+            </Th>
+            <Th cursor="pointer" onClick={() => ordenarPorCampo("titulo_ate")}>
+              Título {ordenCampo === "titulo_ate" ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+            </Th>
+            <Th cursor="pointer" onClick={() => ordenarPorCampo("usuario")}>
+              Usuario {ordenCampo === "usuario" ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+            </Th>
+            <Th cursor="pointer" onClick={() => ordenarPorCampo("estado")}>
+              Estado {ordenCampo === "estado" ? (ordenAscendente ? "⬆️" : "⬇️") : ""}
+            </Th>
             <Th>Factura</Th>
             <Th>Acciones</Th>
           </Tr>
         </Thead>
         <Tbody>
-          {asistencias.map((a) => (
+          {asistenciasFiltradas.map((a) => (
             <Tr key={a.numero_ate}>
               <Td fontWeight="bold">{a.numero_ate}</Td>
               <Td>{a.titulo_ate}</Td>

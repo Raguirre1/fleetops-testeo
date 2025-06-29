@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Table, Thead, Tbody, Tr, Th, Td, Heading, Spinner, Text, Select, IconButton, Input, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, useDisclosure
+  Box, Table, Thead, Tbody, Tr, Th, Td, Heading, Spinner, Text, Select, IconButton, Input, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
-import { EditIcon, CheckIcon, ExternalLinkIcon } from '@chakra-ui/icons';
+import { EditIcon, CheckIcon, ExternalLinkIcon, InfoOutlineIcon } from '@chakra-ui/icons';
 import { supabase } from '../supabaseClient';
 import { useFlota } from './FlotaContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -12,6 +12,19 @@ const meses = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
+
+const mesesDB = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+];
+
+// Para evitar errores de meses faltantes:
+const normalizaMeses = (obj) => {
+  mesesDB.forEach(mes => {
+    if (obj[mes] === undefined || obj[mes] === null) obj[mes] = 0;
+  });
+  return obj;
+};
 
 const EstadoCuentasResumen = ({ anio }) => {
   const { buques } = useFlota();
@@ -29,9 +42,6 @@ const EstadoCuentasResumen = ({ anio }) => {
   const [detalleCuenta, setDetalleCuenta] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Chakra modal disclosure (opcional)
-  // const { isOpen, onOpen, onClose } = useDisclosure();
-
   useEffect(() => {
     if (selectedBuque && selectedMes) cargarResumen();
     // eslint-disable-next-line
@@ -40,7 +50,7 @@ const EstadoCuentasResumen = ({ anio }) => {
   const cargarResumen = async () => {
     setLoading(true);
 
-    // 1. Leer presupuesto mensual
+    // 1. Leer presupuesto mensual (NO SE USA PARA FIJOS/PLANIFICADOS)
     const { data: presupuestos } = await supabase
       .from('presupuesto_mensual')
       .select('*')
@@ -67,12 +77,31 @@ const EstadoCuentasResumen = ({ anio }) => {
       .select('*')
       .eq('estado', 'aceptada');
 
-    const cuentas = [...new Set(presupuestos.map(p => p.cuenta))];
+    // --- Leer presupuestos fijos pedidos y asistencias, y normaliza ---
+    const { data: fijosPedidosRaw } = await supabase
+      .from('presupuestos_fijos_pedidos')
+      .select('*')
+      .eq('buque_id', selectedBuque)
+      .eq('anio', anio);
+
+    const { data: fijosAsistenciasRaw } = await supabase
+      .from('presupuestos_fijos_asistencias')
+      .select('*')
+      .eq('buque_id', selectedBuque)
+      .eq('anio', anio);
+
+    // Normaliza para que siempre existan los 12 meses
+    const fijosPedidos = (fijosPedidosRaw || []).map(normalizaMeses);
+    const fijosAsistencias = (fijosAsistenciasRaw || []).map(normalizaMeses);
+
+    // --- Cuentas posibles (como antes) ---
+    const cuentas = [...new Set((presupuestos || []).map(p => p.cuenta))];
     const mesNum = meses.findIndex(m => m === selectedMes) + 1;
+    const mesDB = mesesDB[mesNum - 1];
 
     const resumenCuentas = cuentas.map(cuenta => {
       // Presupuesto mes actual
-      const presMes = presupuestos
+      const presMes = (presupuestos || [])
         .filter(p =>
           p.cuenta === cuenta &&
           (
@@ -84,9 +113,9 @@ const EstadoCuentasResumen = ({ anio }) => {
         .reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
 
       // ---- Gasto real del mes (compras) ----
-      const gastoCompras = cotizaciones
+      const gastoCompras = (cotizaciones || [])
         .map(cot => {
-          const solicitud = compras.find(s => s.numero_pedido === cot.numero_pedido);
+          const solicitud = (compras || []).find(s => s.numero_pedido === cot.numero_pedido);
           if (
             solicitud &&
             solicitud.buque_id === selectedBuque &&
@@ -104,9 +133,9 @@ const EstadoCuentasResumen = ({ anio }) => {
         .reduce((a, b) => a + b, 0);
 
       // ---- Gasto real del mes (asistencias) ----
-      const gastoAsistencias = cotizacionesAsis
+      const gastoAsistencias = (cotizacionesAsis || [])
         .map(cot => {
-          const asistencia = asistencias.find(s => s.numero_ate === cot.numero_asistencia);
+          const asistencia = (asistencias || []).find(s => s.numero_ate === cot.numero_asistencia);
           if (
             asistencia &&
             asistencia.buque_id === selectedBuque &&
@@ -123,8 +152,37 @@ const EstadoCuentasResumen = ({ anio }) => {
         })
         .reduce((a, b) => a + b, 0);
 
+      // ---- Gasto FIJO presupuestado para el mes ----
+      const gastoFijo =
+        (
+          (fijosPedidos?.filter(f =>
+            f.cuenta === cuenta &&
+            f.tipo_gasto === "Fijo" &&
+            Number(f[mesDB]) > 0
+          ).reduce((a, b) => a + (parseFloat(b[mesDB]) || 0), 0) || 0)
+          +
+          (fijosAsistencias?.filter(f =>
+            f.cuenta === cuenta &&
+            f.tipo_gasto === "Fijo" &&
+            Number(f[mesDB]) > 0
+          ).reduce((a, b) => a + (parseFloat(b[mesDB]) || 0), 0) || 0)
+        );
+
+      // ---- Planificados ----
+      const planificadosPedidos = fijosPedidos?.filter(f =>
+        f.cuenta === cuenta &&
+        f.tipo_gasto === "Planificado" &&
+        Number(f[mesDB]) > 0
+      ) || [];
+
+      const planificadosAsistencias = fijosAsistencias?.filter(f =>
+        f.cuenta === cuenta &&
+        f.tipo_gasto === "Planificado" &&
+        Number(f[mesDB]) > 0
+      ) || [];
+
       // ---- TOTAL GASTO MES ----
-      const gastoMes = gastoCompras + gastoAsistencias;
+      const gastoMes = gastoCompras + gastoAsistencias + gastoFijo;
 
       // Acumulado manual
       const acumuladoAnt =
@@ -140,6 +198,9 @@ const EstadoCuentasResumen = ({ anio }) => {
         acumuladoAnt,
         presMes,
         gastoMes,
+        gastoFijo,
+        planificadosPedidos,
+        planificadosAsistencias,
         balance,
       };
     });
@@ -278,6 +339,30 @@ const EstadoCuentasResumen = ({ anio }) => {
                       </span>
                       <ExternalLinkIcon ml={2} color="gray.500" />
                     </Box>
+                    {/* Desglose: Fijo y Planificado */}
+                    {fila.gastoFijo > 0 && (
+                      <Box fontSize="xs" color="blue.700" pl={1}>
+                        +{fila.gastoFijo.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} fijo
+                      </Box>
+                    )}
+                    {(fila.planificadosPedidos.length > 0 || fila.planificadosAsistencias.length > 0) && (() => {
+                      // Variables de mes dentro del render para asegurar scope correcto:
+                      const mesNum = meses.findIndex(m => m === selectedMes) + 1;
+                      const keyMes = mesesDB[mesNum - 1];
+                      // Suma robusta:
+                      const gastoPlanificado = [...fila.planificadosPedidos, ...fila.planificadosAsistencias]
+                        .reduce((a, b) => {
+                          const valor = (b && b[keyMes] !== undefined && b[keyMes] !== null) ? parseFloat(b[keyMes]) : 0;
+                          return a + (isNaN(valor) ? 0 : valor);
+                        }, 0);
+                      return (
+                        <Box fontSize="xs" color="orange.700" pl={1} display="flex" alignItems="center">
+                          <InfoOutlineIcon mr={1} />
+                          Gasto planificado:{" "}
+                          {gastoPlanificado.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                        </Box>
+                      );
+                    })()}
                   </Td>
                   <Td
                     style={{

@@ -28,6 +28,21 @@ import ProvisionesEnviadas from "./ProvisionesEnviadas";
 import { useFlota } from "./FlotaContext";
 import { ExternalLinkIcon } from "@chakra-ui/icons";
 import { motion, AnimatePresence } from "framer-motion";
+import { Alert, AlertIcon, AlertTitle, AlertDescription } from "@chakra-ui/react";
+
+// ...
+
+<Alert status="warning" mt={6} borderRadius="md" alignItems="flex-start" px={6} py={3}>
+  <AlertIcon boxSize="20px" mt={1} />
+  <Box>
+    <AlertTitle fontSize="md" mb={1}>Nota:</AlertTitle>
+    <AlertDescription fontSize="sm" lineHeight="1.6">
+      Provisionar aquellos contratos o gastos fijos estimados para los cuales no se disponga de factura final recibida.
+      En caso de tratarse de un gasto fijo mensual, su valor se irá acumulando al mes anterior hasta que se reciba la factura correspondiente.
+    </AlertDescription>
+  </Box>
+</Alert>
+
 
 const cuentas = [
   "Casco", "Máquinas", "Electricidad", "Electrónicas",
@@ -341,6 +356,35 @@ const Provisiones = () => {
           </Table>
         </Box>
       )}
+      {/* Nota informativa sobre provisiones */}
+      <Box
+        mt={6}
+        p={4}
+        bg="yellow.50"
+        border="1px solid #FFD600"
+        borderRadius="md"
+        fontSize="md"
+        color="gray.800"
+        maxW="900px"
+        mx="auto"
+        display="flex"
+        alignItems="flex-start"
+      >
+        <Box as="span" flexShrink={0} mt={1} mr={3}>
+          <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="12" fill="#FFD600"/>
+            <path fill="#333" d="M11.25 8.25V7.5a.75.75 0 0 1 1.5 0v.75a.75.75 0 0 1-1.5 0ZM12 10.5c.414 0 .75.336.75.75v3a.75.75 0 1 1-1.5 0v-3c0-.414.336-.75.75-.75Z"/>
+          </svg>
+        </Box>
+        <Box>
+          <Box as="span" fontWeight="bold">Nota:</Box>{" "}
+          Provisionar aquellos contratos o gastos fijos estimados para los cuales no se disponga de factura final recibida.
+          <br />
+          <Box as="span" fontWeight="bold">En caso de tratarse de un gasto fijo mensual,</Box> su valor se irá acumulando al mes anterior hasta que se reciba la factura correspondiente.
+        </Box>
+      </Box>
+
+
 
       {/* --- Modal de Detalle de Provisiones --- */}
       <AnimatePresence>
