@@ -135,9 +135,14 @@ const PresupuestoFijo = ({ buqueId, anio }) => {
       mesesDB.forEach((mes) => {
         registro[mes] = parseFloat(fila[mes]) || 0;
       });
-      if (fila.id && isUUID(fila.id)) registro.id = fila.id;
+      // Solo añade id si es UUID VÁLIDO
+      if (fila.id && isUUID(fila.id)) {
+        registro.id = fila.id;
+      }
+      // Si no es UUID válido, no lo incluye (NO enviar "" ni null)
       return registro;
     };
+
 
     const registrosPedidos = datosPedidos.map(preparar);
     const registrosAsistencias = datosAsistencias.map(preparar);
