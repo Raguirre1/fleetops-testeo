@@ -27,16 +27,16 @@ const DashboardGeneral = ({ onIrAModulos }) => {
     try {
       const { data: buques } = await supabase
         .from("buques")
-        .select("nombre")
+        .select("id, nombre")
         .eq("flota_id", flotaSeleccionada.id);
 
       const { data: pedidos } = await supabase
         .from("solicitudes_compra")
-        .select("numero_pedido, estado, buque");
+        .select("numero_pedido, estado, buque_id");
 
       const { data: asistencias } = await supabase
         .from("solicitudes_asistencia")
-        .select("numero_ate, estado, buque");
+        .select("numero_ate, estado, buque_id");
 
       const { data: cotizaciones } = await supabase
         .from("cotizaciones_proveedor")
@@ -48,19 +48,19 @@ const DashboardGeneral = ({ onIrAModulos }) => {
 
       const { data: pagos } = await supabase
         .from("pagos")
-        .select("numero_pedido, requiere_pago_anticipado");
+        .select("numero_pedido, requiere_pago_anticipado, gestionado");
 
       const { data: pagosAsistencias } = await supabase
         .from("pagos_asistencia")
-        .select("numero_ate, requiere_pago_anticipado");
+        .select("numero_ate, requiere_pago_anticipado, gestionado");
 
       const resumenPorBuque = {};
 
       for (const bq of buques) {
-        const buque = bq.nombre;
-        const pedidosBuque = pedidos.filter(p => p.buque === buque);
-        const asistenciasBuque = asistencias.filter(a => a.buque === buque);
+        const pedidosBuque = pedidos.filter(p => p.buque_id === bq.id);
+        const asistenciasBuque = asistencias.filter(a => a.buque_id === bq.id);
 
+        // --- PEDIDOS ---
         const pedidosEnConsulta = pedidosBuque.filter(p => p.estado === "En Consulta").length;
         const pedidosSinCotizacion = pedidosBuque.filter(p =>
           !cotizaciones.some(c => c.numero_pedido === p.numero_pedido && c.valor != null)
@@ -69,29 +69,42 @@ const DashboardGeneral = ({ onIrAModulos }) => {
           cotizaciones.some(c =>
             c.numero_pedido === p.numero_pedido &&
             c.valor != null &&
-            (c.valor_factura === null || c.valor_factura === "")
+            (!c.valor_factura || String(c.valor_factura).trim() === "")
           )
         );
+        // SOLO CONTAR PENDIENTES (no gestionados)
         const pedidosAnticipo = pedidosBuque.filter(p =>
-          pagos.some(pg => pg.numero_pedido === p.numero_pedido && pg.requiere_pago_anticipado)
+          pagos.some(pg =>
+            pg.numero_pedido === p.numero_pedido &&
+            pg.requiere_pago_anticipado &&
+            !pg.gestionado // SOLO pendientes
+          )
         );
 
+        // --- ASISTENCIAS ---
         const asistenciasEnConsulta = asistenciasBuque.filter(a => a.estado === "En Consulta").length;
         const asistenciasSinCotizacion = asistenciasBuque.filter(a =>
-          !cotizacionesAsistencias.some(c => c.numero_asistencia === a.numero_ate && c.valor != null)
+          !cotizacionesAsistencias.some(c =>
+            String(c.numero_asistencia).trim() === String(a.numero_ate).trim() && c.valor != null
+          )
         );
         const asistenciasSinFactura = asistenciasBuque.filter(a =>
           cotizacionesAsistencias.some(c =>
-            c.numero_asistencia === a.numero_ate &&
+            String(c.numero_asistencia).trim() === String(a.numero_ate).trim() &&
             c.valor != null &&
-            (c.valor_factura === null || c.valor_factura === "")
+            (!c.valor_factura || String(c.valor_factura).trim() === "")
           )
         );
+        // SOLO CONTAR PENDIENTES (no gestionados)
         const asistenciasAnticipo = asistenciasBuque.filter(a =>
-          pagosAsistencias.some(pg => pg.numero_ate === a.numero_ate && pg.requiere_pago_anticipado)
+          pagosAsistencias.some(pg =>
+            String(pg.numero_ate).trim() === String(a.numero_ate).trim() &&
+            pg.requiere_pago_anticipado &&
+            !pg.gestionado // SOLO pendientes
+          )
         );
 
-        resumenPorBuque[buque] = {
+        resumenPorBuque[bq.nombre] = {
           pedidos: {
             consulta: pedidosEnConsulta,
             sinCotizacion: pedidosSinCotizacion.length,
@@ -117,6 +130,7 @@ const DashboardGeneral = ({ onIrAModulos }) => {
 
   useEffect(() => {
     cargarDatos();
+    // eslint-disable-next-line
   }, []);
 
   if (cargando) {
