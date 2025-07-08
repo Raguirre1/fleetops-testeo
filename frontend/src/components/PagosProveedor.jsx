@@ -6,9 +6,7 @@ import {
   VStack,
   Input,
   Button,
-  Stack,
   Divider,
-  Link,
   useToast,
   HStack,
   FormLabel,
@@ -17,7 +15,7 @@ import { supabase } from "../supabaseClient";
 
 const bucket = "asistencias";
 
-const PagosProveedor = ({ numeroAte }) => {
+const PagosProveedor = ({ numeroAte, buqueId }) => {
   const [datosPago, setDatosPago] = useState({
     requiere_pago_anticipado: false,
     factura_no_euro: false,
@@ -33,21 +31,34 @@ const PagosProveedor = ({ numeroAte }) => {
 
   useEffect(() => {
     const fetchPago = async () => {
+      if (!numeroAte || !buqueId) return;
       const { data, error } = await supabase
         .from("pagos_asistencia")
         .select("*")
         .eq("numero_ate", numeroAte)
+        .eq("buque_id", buqueId)
         .maybeSingle();
 
       if (error && error.code !== "PGRST116") {
         console.error("Error cargando datos de pago:", error);
       } else if (data) {
         setDatosPago(data);
+      } else {
+        // Si no hay datos, inicializa con valores por defecto
+        setDatosPago({
+          requiere_pago_anticipado: false,
+          factura_no_euro: false,
+          gestionado: false,
+          factura_proforma_path: "",
+          factura_divisa_path: "",
+          justificante_pago_path: "",
+          factura_final_path: "",
+        });
       }
     };
 
     fetchPago();
-  }, [numeroAte]);
+  }, [numeroAte, buqueId]);
 
   const uploadPagoFile = async (file, campo) => {
     const timestamp = Date.now();
@@ -56,20 +67,16 @@ const PagosProveedor = ({ numeroAte }) => {
 
     const { error: uploadError } = await supabase.storage
       .from(bucket)
-      .upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
+      .upload(path, file, { cacheControl: "3600", upsert: false });
 
     if (uploadError) throw new Error(`Error al subir ${campo}: ${uploadError.message}`);
-
     return path;
   };
 
   const generarSignedUrl = async (path) => {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
     if (error) {
-      toast({ title: "No se pudo generar URL firmada", status: "error" });
+      toast({ title: "Error generando URL", status: "error" });
       return null;
     }
     return data.signedUrl;
@@ -77,18 +84,15 @@ const PagosProveedor = ({ numeroAte }) => {
 
   const handleFileUpload = async (e, campo) => {
     let file = null;
-
     if (e?.target?.files?.length > 0) {
       file = e.target.files[0];
     } else if (e?.dataTransfer?.files?.length > 0) {
       file = e.dataTransfer.files[0];
     }
-
     if (!file) {
       toast({ title: "Archivo no válido", status: "warning" });
       return;
     }
-
     try {
       const path = await uploadPagoFile(file, campo);
       const updated = { ...datosPago, [`${campo}_path`]: path };
@@ -103,13 +107,11 @@ const PagosProveedor = ({ numeroAte }) => {
   const handleDeleteFile = async (campo) => {
     const path = datosPago[`${campo}_path`];
     if (!path) return;
-
     const { error } = await supabase.storage.from(bucket).remove([path]);
     if (error) {
       toast({ title: "Error al eliminar archivo", status: "error" });
       return;
     }
-
     const updated = { ...datosPago, [`${campo}_path`]: "" };
     setDatosPago(updated);
 
@@ -117,10 +119,10 @@ const PagosProveedor = ({ numeroAte }) => {
       {
         ...updated,
         numero_ate: numeroAte,
+        buque_id: buqueId,
       },
-      { onConflict: "numero_ate" }
+      { onConflict: ["numero_ate", "buque_id"] }
     );
-
     if (updateError) {
       toast({ title: "Error al actualizar base de datos", status: "error" });
     } else {
@@ -129,20 +131,36 @@ const PagosProveedor = ({ numeroAte }) => {
   };
 
   const handleGuardar = async () => {
+    if (!buqueId || buqueId.length !== 36) {
+      toast({ title: "El buqueId es inválido o no existe", status: "error" });
+      return;
+    }
+
+    const pagoToSave = {
+      numero_ate: numeroAte,
+      buque_id: buqueId,
+      requiere_pago_anticipado: datosPago.requiere_pago_anticipado,
+      factura_no_euro: datosPago.factura_no_euro,
+      gestionado: datosPago.gestionado,
+      factura_proforma_path: datosPago.factura_proforma_path,
+      factura_divisa_path: datosPago.factura_divisa_path,
+      justificante_pago_path: datosPago.justificante_pago_path,
+      factura_final_path: datosPago.factura_final_path,
+    };
+
     const { error } = await supabase.from("pagos_asistencia").upsert(
-      {
-        ...datosPago,
-        numero_ate: numeroAte,
-      },
-      { onConflict: "numero_ate" }
+      pagoToSave,
+      { onConflict: ["numero_ate", "buque_id"] }
     );
 
     if (error) {
-      toast({ title: "Error al guardar datos", status: "error" });
+      toast({ title: "Error al guardar datos", status: "error", description: error.message });
+      console.error("Error Supabase:", error);
     } else {
       toast({ title: "Información de pago guardada", status: "success" });
     }
   };
+
 
   const renderZonaArchivo = (campo, etiqueta) => {
     const archivoCargado = datosPago[`${campo}_path`];
@@ -184,8 +202,8 @@ const PagosProveedor = ({ numeroAte }) => {
           cursor="pointer"
           color="blue.600"
           fontWeight="semibold"
-           display="block" // 👈 Asegura que ocupa toda la línea
-        textAlign="center" // 👈 Centra horizontalmente
+          display="block"
+          textAlign="center"
           _hover={{ textDecoration: "underline" }}
         >
           📎 Seleccionar archivo
@@ -222,8 +240,7 @@ const PagosProveedor = ({ numeroAte }) => {
     );
   };
 
-
-    return (
+  return (
     <Box borderWidth="1px" borderRadius="md" p={4}>
       <Text fontSize="xl" fontWeight="bold" mb={2}>
         Gestión de Pago
@@ -289,7 +306,6 @@ const PagosProveedor = ({ numeroAte }) => {
       </VStack>
     </Box>
   );
-
 };
 
 export default PagosProveedor;

@@ -153,8 +153,8 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
 
         <Divider />
 
-        <AsistenciaProveedor numeroAsistencia={asistencia.numeroAsistencia} />
-        <PagosProveedor numeroAte={asistencia.numeroAsistencia} />
+        <AsistenciaProveedor numeroAsistencia={asistencia.numeroAsistencia} buqueId={asistencia.buque_id} />
+        <PagosProveedor numeroAte={asistencia.numeroAsistencia} buqueId={asistencia.buque_id} />
 
         <Button onClick={handleVolverConConfirmacion} colorScheme="gray" mt={6}>
           Volver

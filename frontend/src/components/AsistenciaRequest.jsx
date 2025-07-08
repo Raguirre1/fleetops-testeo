@@ -296,6 +296,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
   if (mostrarArchivadas) {
     return (
       <AsistenciaArchivadas
+        buqueId={buqueSeleccionado} // 👈 Añade el filtro por buque
         onVolver={() => {
           setMostrarArchivadas(false);
           cargarSolicitudes();
@@ -304,6 +305,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       />
     );
   }
+
 
   if (!buqueSeleccionado) {
     return (

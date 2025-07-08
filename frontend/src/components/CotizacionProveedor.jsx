@@ -14,7 +14,7 @@ import {
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
 
-const CotizacionProveedor = ({ numeroPedido }) => {
+const CotizacionProveedor = ({ numeroPedido, buqueId }) => {
   const [cotizaciones, setCotizaciones] = useState([]);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -22,11 +22,12 @@ const CotizacionProveedor = ({ numeroPedido }) => {
 
   useEffect(() => {
     const fetchCotizaciones = async () => {
+      if (!numeroPedido || !buqueId) return;
       const { data, error } = await supabase
         .from("cotizaciones_proveedor")
-        .select("numero_pedido, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at, fecha_aceptacion")
-        .eq("numero_pedido", numeroPedido);
-
+        .select("numero_pedido, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at, fecha_aceptacion, buque_id")
+        .eq("numero_pedido", numeroPedido)
+        .eq("buque_id", buqueId);
 
       if (error) {
         console.error("Error cargando cotizaciones:", error);
@@ -36,7 +37,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
     };
 
     fetchCotizaciones();
-  }, [numeroPedido]);
+  }, [numeroPedido, buqueId]);
 
   const handleAddCotizacion = () => {
     if (cotizaciones.length >= 3) return;
@@ -49,7 +50,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
         path_cotizacion: "",
         path_invoice: "",
         valor_factura: "",
-        fecha_aceptacion: "", 
+        fecha_aceptacion: "",
       },
     ]);
   };
@@ -62,7 +63,11 @@ const CotizacionProveedor = ({ numeroPedido }) => {
         const { error } = await supabase
           .from("cotizaciones_proveedor")
           .delete()
-          .match({ numero_pedido: numeroPedido, proveedor });
+          .match({
+            numero_pedido: numeroPedido,
+            buque_id: buqueId,
+            proveedor
+          });
 
         if (error) {
           console.error("Error al borrar proveedor en Supabase:", error);
@@ -167,7 +172,6 @@ const CotizacionProveedor = ({ numeroPedido }) => {
   };
 
   const handleSave = async () => {
-    // Solo chequea campos en cotizaciones activas
     const incompletas = cotizaciones.some(
       (c) => c.estado !== "cancelada" && (!c.proveedor.trim() || !c.path_cotizacion)
     );
@@ -192,6 +196,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
         await supabase.from("cotizaciones_proveedor").upsert(
           {
             numero_pedido: numeroPedido,
+            buque_id: buqueId,
             proveedor,
             valor: cot.estado === "cancelada" ? 0 : valor,
             estado: cot.estado,
@@ -200,7 +205,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
             valor_factura: cot.estado === "cancelada" ? null : valor_factura,
             fecha_aceptacion: cot.estado === "cancelada" ? null : cot.fecha_aceptacion,
           },
-          { onConflict: ["numero_pedido", "proveedor"] }
+          { onConflict: ["numero_pedido", "proveedor", "buque_id"] }
         );
       }
 
@@ -210,8 +215,6 @@ const CotizacionProveedor = ({ numeroPedido }) => {
       toast({ title: "Error al guardar en Supabase", status: "error" });
     }
   };
-
-
 
   return (
     <Box mt={8}>
@@ -243,7 +246,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
                   value={cot.fecha_aceptacion ? cot.fecha_aceptacion.slice(0, 10) : ""}
                   onChange={e => handleChange(index, "fecha_aceptacion", e.target.value)}
                   width="fit-content"
-                />                
+                />
               </Box>
 
               <HStack mt={2} spacing={4}>
@@ -299,7 +302,6 @@ const CotizacionProveedor = ({ numeroPedido }) => {
                   fontWeight="semibold"
                   textAlign="center"
                   display="block"
-
                 >
                   Seleccionar archivo
                 </FormLabel>
@@ -366,7 +368,6 @@ const CotizacionProveedor = ({ numeroPedido }) => {
                   fontWeight="semibold"
                   textAlign="center"
                   display="block"
-
                 >
                   Seleccionar archivo
                 </FormLabel>
@@ -410,6 +411,7 @@ const CotizacionProveedor = ({ numeroPedido }) => {
 
 CotizacionProveedor.propTypes = {
   numeroPedido: PropTypes.string.isRequired,
+  buqueId: PropTypes.string.isRequired,
 };
 
 export default CotizacionProveedor;

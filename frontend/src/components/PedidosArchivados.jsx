@@ -16,7 +16,12 @@ import {
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
 
-const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
+/**
+ * Ahora este componente espera recibir por props:
+ * - buqueId: el ID del buque actualmente seleccionado.
+ * Si usas contexto, puedes sacar buqueId de ahí.
+ */
+const PedidosArchivados = ({ buqueId, onVolver, onVerDetalle }) => {
   const [pedidos, setPedidos] = useState([]);
   const [estadoFactura, setEstadoFactura] = useState({});
   const [filtro, setFiltro] = useState("");
@@ -25,10 +30,15 @@ const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
   const toast = useToast();
 
   const cargarArchivados = async () => {
+    if (!buqueId) {
+      setPedidos([]); // Si no hay buque seleccionado, no mostramos nada.
+      return;
+    }
     const { data, error } = await supabase
       .from("solicitudes_compra")
       .select("*")
-      .eq("archivado", true);
+      .eq("archivado", true)
+      .eq("buque_id", buqueId); // Filtra por buque seleccionado
 
     if (!error) setPedidos(data);
     else toast({ title: "Error al cargar pedidos archivados", status: "error", duration: 3000 });
@@ -67,7 +77,8 @@ const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
   useEffect(() => {
     cargarArchivados();
     cargarEstadoFacturas();
-  }, []);
+    // eslint-disable-next-line
+  }, [buqueId]); // Se recarga al cambiar el buque seleccionado
 
   // Filtro de búsqueda
   const pedidosFiltrados = pedidos.filter((p) => {
@@ -163,6 +174,11 @@ const PedidosArchivados = ({ onVolver, onVerDetalle }) => {
           ))}
         </Tbody>
       </Table>
+      {(!pedidos || pedidos.length === 0) && (
+        <Box textAlign="center" mt={6} color="gray.500">
+          No hay pedidos archivados para este buque.
+        </Box>
+      )}
     </Box>
   );
 };

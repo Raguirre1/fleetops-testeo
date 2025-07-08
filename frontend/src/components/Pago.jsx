@@ -16,7 +16,7 @@ import { supabase } from "../supabaseClient";
 
 const bucket = "cotizaciones";
 
-const Pago = ({ numeroPedido }) => {
+const Pago = ({ numeroPedido, buqueId }) => {
   const [datosPago, setDatosPago] = useState({
     requiere_pago_anticipado: false,
     factura_no_euro: false,
@@ -32,21 +32,34 @@ const Pago = ({ numeroPedido }) => {
 
   useEffect(() => {
     const fetchPago = async () => {
+      if (!numeroPedido || !buqueId) return;
       const { data, error } = await supabase
         .from("pagos")
         .select("*")
         .eq("numero_pedido", numeroPedido)
+        .eq("buque_id", buqueId)
         .maybeSingle();
 
       if (error && error.code !== "PGRST116") {
         console.error("Error cargando datos de pago:", error);
       } else if (data) {
         setDatosPago(data);
+      } else {
+        // Si no hay datos, inicializa con valores por defecto
+        setDatosPago({
+          requiere_pago_anticipado: false,
+          factura_no_euro: false,
+          gestionado: false,
+          factura_proforma_path: "",
+          factura_divisa_path: "",
+          justificante_pago_path: "",
+          factura_final_path: "",
+        });
       }
     };
 
     fetchPago();
-  }, [numeroPedido]);
+  }, [numeroPedido, buqueId]);
 
   const uploadPagoFile = async (file, campo) => {
     const timestamp = Date.now();
@@ -120,8 +133,9 @@ const Pago = ({ numeroPedido }) => {
       {
         ...updated,
         numero_pedido: numeroPedido,
+        buque_id: buqueId,
       },
-      { onConflict: "numero_pedido" }
+      { onConflict: ["numero_pedido", "buque_id"] }
     );
 
     if (updateError) {
@@ -132,20 +146,37 @@ const Pago = ({ numeroPedido }) => {
   };
 
   const handleGuardar = async () => {
+    if (!buqueId || buqueId.length !== 36) {
+      toast({ title: "El buqueId es inválido o no existe", status: "error" });
+      return;
+    }
+
+    // SOLO los campos que existen en la tabla pagos
+    const pagoToSave = {
+      numero_pedido: numeroPedido,
+      buque_id: buqueId,
+      requiere_pago_anticipado: datosPago.requiere_pago_anticipado,
+      factura_no_euro: datosPago.factura_no_euro,
+      gestionado: datosPago.gestionado,
+      factura_proforma_path: datosPago.factura_proforma_path,
+      factura_divisa_path: datosPago.factura_divisa_path,
+      justificante_pago_path: datosPago.justificante_pago_path,
+      factura_final_path: datosPago.factura_final_path,
+    };
+
     const { error } = await supabase.from("pagos").upsert(
-      {
-        ...datosPago,
-        numero_pedido: numeroPedido,
-      },
-      { onConflict: "numero_pedido" }
+      pagoToSave,
+      { onConflict: ["numero_pedido", "buque_id"] }
     );
 
     if (error) {
-      toast({ title: "Error al guardar datos", status: "error" });
+      toast({ title: "Error al guardar datos", status: "error", description: error.message });
+      console.error("Error Supabase:", error);
     } else {
       toast({ title: "Información de pago guardada", status: "success" });
     }
   };
+
 
   const renderZonaArchivo = (campo, etiqueta) => {
     const archivoCargado = datosPago[`${campo}_path`];
@@ -187,8 +218,8 @@ const Pago = ({ numeroPedido }) => {
           cursor="pointer"
           color="blue.600"
           fontWeight="semibold"
-           display="block" // 👈 Asegura que ocupa toda la línea
-        textAlign="center" // 👈 Centra horizontalmente
+          display="block"
+          textAlign="center"
           _hover={{ textDecoration: "underline" }}
         >
           📎 Seleccionar archivo
@@ -225,8 +256,7 @@ const Pago = ({ numeroPedido }) => {
     );
   };
 
-
-    return (
+  return (
     <Box borderWidth="1px" borderRadius="md" p={4}>
       <Text fontSize="xl" fontWeight="bold" mb={2}>
         Gestión de Pago
@@ -292,7 +322,6 @@ const Pago = ({ numeroPedido }) => {
       </VStack>
     </Box>
   );
-
 };
 
 export default Pago;

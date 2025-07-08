@@ -16,7 +16,7 @@ import {
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
 
-const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
+const AsistenciaArchivadas = ({ buqueId, onVolver, onVerDetalle }) => {
   const [asistencias, setAsistencias] = useState([]);
   const [estadoFactura, setEstadoFactura] = useState({});
   const [filtro, setFiltro] = useState("");
@@ -25,10 +25,15 @@ const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
   const toast = useToast();
 
   const cargarArchivadas = async () => {
+    if (!buqueId) {
+      setAsistencias([]);
+      return;
+    }
     const { data, error } = await supabase
       .from("solicitudes_asistencia")
       .select("*")
-      .eq("archivado", true);
+      .eq("archivado", true)
+      .eq("buque_id", buqueId); // <--- Filtra por buqueId
 
     if (!error) setAsistencias(data);
     else toast({ title: "Error al cargar asistencias archivadas", status: "error", duration: 3000 });
@@ -67,7 +72,8 @@ const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
   useEffect(() => {
     cargarArchivadas();
     cargarEstadoFacturas();
-  }, []);
+    // eslint-disable-next-line
+  }, [buqueId]);
 
   // Filtro de búsqueda
   const asistenciasFiltradas = asistencias.filter((a) => {
@@ -163,6 +169,11 @@ const AsistenciaArchivadas = ({ onVolver, onVerDetalle }) => {
           ))}
         </Tbody>
       </Table>
+      {(!asistencias || asistencias.length === 0) && (
+        <Box textAlign="center" mt={6} color="gray.500">
+          No hay asistencias archivadas para este buque.
+        </Box>
+      )}
     </Box>
   );
 };

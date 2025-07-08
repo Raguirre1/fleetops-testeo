@@ -305,11 +305,13 @@ const PurchaseRequest = ({ usuario, onBack }) => {
   if (mostrarArchivados) {
     return (
       <PedidosArchivados
+        buqueId={buqueSeleccionado}           
         onVolver={volverDeArchivados}
         onVerDetalle={handleVerDetalle}
       />
     );
   }
+
 
   if (!buqueSeleccionado) {
     return (

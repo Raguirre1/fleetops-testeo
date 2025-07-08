@@ -319,9 +319,10 @@ const PurchaseDetail = ({ pedido, volver }) => {
         )}
 
 
-        <ExcelUploadCotizacion numeroPedido={pedido.numeroPedido} />
-        <CotizacionProveedor numeroPedido={pedido.numeroPedido} />
-        <Pago numeroPedido={pedido.numeroPedido} />
+        <ExcelUploadCotizacion numeroPedido={pedido.numeroPedido} buqueId={pedido.buque_id} />
+        <CotizacionProveedor numeroPedido={pedido.numeroPedido} buqueId={pedido.buque_id} />
+        <Pago numeroPedido={pedido.numeroPedido} buqueId={pedido.buque_id} />
+
 
         <Button onClick={handleVolverConConfirmacion} colorScheme="gray" mt={6}>
           Volver

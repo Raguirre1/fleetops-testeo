@@ -8,14 +8,13 @@ import {
   VStack,
   HStack,
   Stack,
-  Link,
   useToast,
   Heading,
   FormLabel,
 } from "@chakra-ui/react";
 import { supabase } from "../supabaseClient";
 
-const AsistenciaProveedor = ({ numeroAsistencia }) => {
+const AsistenciaProveedor = ({ numeroAsistencia, buqueId }) => {
   const [cotizaciones, setCotizaciones] = useState([]);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -23,10 +22,14 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
 
   useEffect(() => {
     const fetchCotizaciones = async () => {
+      if (!numeroAsistencia || !buqueId) return;
       const { data, error } = await supabase
         .from("asistencias_proveedor")
-        .select("numero_asistencia, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at, fecha_aceptacion")
-        .eq("numero_asistencia", numeroAsistencia);
+        .select(
+          "numero_asistencia, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at, fecha_aceptacion, buque_id"
+        )
+        .eq("numero_asistencia", numeroAsistencia)
+        .eq("buque_id", buqueId);
 
       if (error) {
         console.error("Error cargando cotizaciones:", error);
@@ -36,7 +39,7 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
     };
 
     fetchCotizaciones();
-  }, [numeroAsistencia]);
+  }, [numeroAsistencia, buqueId]);
 
   const handleAddCotizacion = () => {
     if (cotizaciones.length >= 3) return;
@@ -49,6 +52,7 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
         path_cotizacion: "",
         path_invoice: "",
         valor_factura: "",
+        fecha_aceptacion: "",
       },
     ]);
   };
@@ -61,7 +65,7 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
         const { error } = await supabase
           .from("asistencias_proveedor")
           .delete()
-          .match({ numero_asistencia: numeroAsistencia, proveedor });
+          .match({ numero_asistencia: numeroAsistencia, proveedor, buque_id: buqueId });
 
         if (error) {
           console.error("Error al borrar proveedor en Supabase:", error);
@@ -163,9 +167,7 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
   };
 
   const handleSave = async () => {
-    const incompletas = cotizaciones.some(
-      (c) => !c.proveedor?.trim()
-    );
+    const incompletas = cotizaciones.some((c) => !c.proveedor?.trim());
 
     if (incompletas) {
       toast({
@@ -186,24 +188,24 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
       });
     }
 
-
     try {
       for (const cot of cotizaciones) {
         const dataToSend = {
           numero_asistencia: numeroAsistencia,
           proveedor: cot.proveedor.trim(),
+          buque_id: buqueId,
           valor: isNaN(parseFloat(cot.valor)) ? 0 : parseFloat(cot.valor),
           estado: cot.estado || "pendiente",
           path_cotizacion: cot.path_cotizacion || null,
           path_invoice: cot.path_invoice || null,
           valor_factura: isNaN(parseFloat(cot.valor_factura)) ? 0 : parseFloat(cot.valor_factura),
-          fecha_aceptacion: cot.fecha_aceptacion || null, 
+          fecha_aceptacion: cot.fecha_aceptacion || null,
         };
 
         const { error } = await supabase
           .from("asistencias_proveedor")
           .upsert(dataToSend, {
-            onConflict: ["numero_asistencia", "proveedor"],
+            onConflict: ["numero_asistencia", "proveedor", "buque_id"],
           });
 
         if (error) {
@@ -226,7 +228,9 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
 
   return (
     <Box mt={8}>
-      <Heading size="md" mb={4}>Proveedores</Heading>
+      <Heading size="md" mb={4}>
+        Proveedores
+      </Heading>
       <VStack spacing={6} align="stretch">
         {cotizaciones.map((cot, index) => (
           <Box key={index} p={4} borderWidth={1} borderRadius="md">
@@ -237,10 +241,13 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                 </Text>
                 <Input
                   value={cot.proveedor}
-                  onChange={(e) => handleChange(index, "proveedor", e.target.value)}
+                  onChange={(e) =>
+                    handleChange(index, "proveedor", e.target.value)
+                  }
                 />
                 <Text fontSize="sm" color="gray.500" mt={1}>
-                  Para modificar el nombre del proveedor, elimínalo y vuelve a añadirlo.
+                  Para modificar el nombre del proveedor, elimínalo y vuelve a
+                  añadirlo.
                 </Text>
               </Box>
 
@@ -249,13 +256,21 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                 <Input
                   type="number"
                   value={cot.valor}
-                  onChange={(e) => handleChange(index, "valor", e.target.value)}
+                  onChange={(e) =>
+                    handleChange(index, "valor", e.target.value)
+                  }
                 />
-                <Text fontWeight="medium" mt={2}>Fecha aceptación cotización</Text>
+                <Text fontWeight="medium" mt={2}>
+                  Fecha aceptación cotización
+                </Text>
                 <Input
                   type="date"
-                  value={cot.fecha_aceptacion ? cot.fecha_aceptacion.slice(0, 10) : ""}
-                  onChange={e => handleChange(index, "fecha_aceptacion", e.target.value)}
+                  value={
+                    cot.fecha_aceptacion ? cot.fecha_aceptacion.slice(0, 10) : ""
+                  }
+                  onChange={(e) =>
+                    handleChange(index, "fecha_aceptacion", e.target.value)
+                  }
                   width="fit-content"
                 />
               </Box>
@@ -302,7 +317,9 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                 <Input
                   type="file"
                   accept=".pdf"
-                  onChange={(e) => handleFileUpload(e.target.files[0], index, "cotizacion")}
+                  onChange={(e) =>
+                    handleFileUpload(e.target.files[0], index, "cotizacion")
+                  }
                   display="none"
                   id={`upload-cotizacion-${index}`}
                 />
@@ -327,7 +344,9 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                         size="sm"
                         colorScheme="blue"
                         onClick={async () => {
-                          const url = await generarSignedUrl(cot.path_cotizacion);
+                          const url = await generarSignedUrl(
+                            cot.path_cotizacion
+                          );
                           if (url) window.open(url, "_blank");
                         }}
                       >
@@ -355,11 +374,12 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                 <Input
                   type="number"
                   value={cot.valor_factura || ""}
-                  onChange={(e) => handleChange(index, "valor_factura", e.target.value)}
+                  onChange={(e) =>
+                    handleChange(index, "valor_factura", e.target.value)
+                  }
                 />
               </Box>
 
-              
               {/* Factura PDF */}
               <Box
                 border="2px dashed"
@@ -385,7 +405,9 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                 <Input
                   type="file"
                   accept=".pdf"
-                  onChange={(e) => handleFileUpload(e.target.files[0], index, "invoice")}
+                  onChange={(e) =>
+                    handleFileUpload(e.target.files[0], index, "invoice")
+                  }
                   display="none"
                   id={`upload-invoice-${index}`}
                 />
@@ -430,7 +452,11 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
                 )}
               </Box>
 
-              <Button colorScheme="red" variant="link" onClick={() => handleRemoveCotizacion(index)}>
+              <Button
+                colorScheme="red"
+                variant="link"
+                onClick={() => handleRemoveCotizacion(index)}
+              >
                 Eliminar proveedor
               </Button>
             </Stack>
@@ -443,7 +469,9 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
           <Button onClick={handleAddCotizacion}>Añadir proveedor</Button>
         )}
         {cotizaciones.length > 0 && (
-          <Button colorScheme="blue" onClick={handleSave}>Guardar cotizaciones</Button>
+          <Button colorScheme="blue" onClick={handleSave}>
+            Guardar cotizaciones
+          </Button>
         )}
       </HStack>
     </Box>
@@ -452,6 +480,7 @@ const AsistenciaProveedor = ({ numeroAsistencia }) => {
 
 AsistenciaProveedor.propTypes = {
   numeroAsistencia: PropTypes.string.isRequired,
+  buqueId: PropTypes.string.isRequired,
 };
 
 export default AsistenciaProveedor;
