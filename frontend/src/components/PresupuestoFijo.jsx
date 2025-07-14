@@ -28,7 +28,7 @@ const cuentasContables = [
   "Casco",
   "Máquinas",
   "Electricidad",
-  "Electrónica",
+  "Electrónicas",
   "MLC",
   "SEP",
   "Fonda",
