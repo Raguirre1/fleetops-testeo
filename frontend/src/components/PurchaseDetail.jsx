@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import ExcelUploadCotizacion from "./ExcelUploadCotizacion";
 import CotizacionProveedor from "./CotizacionProveedor";
@@ -22,6 +22,12 @@ import {
   Link,
   useToast,
   HStack,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from "@chakra-ui/react";
 
 const PurchaseDetail = ({ pedido, volver }) => {
@@ -33,6 +39,8 @@ const PurchaseDetail = ({ pedido, volver }) => {
   const [isDragging, setIsDragging] = useState(false);
   const toast = useToast();
   const [nombreBuque, setNombreBuque] = useState("");
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const cancelRef = useRef();
 
   const loadArchivosSubidos = async () => {
     const folderPath = `${pedido.numeroPedido}/documentos/`;
@@ -194,13 +202,12 @@ const PurchaseDetail = ({ pedido, volver }) => {
       toast({ title: "Error al generar enlace", status: "error" });
     }
   };
-  const handleVolverConConfirmacion = () => {
-    const confirmar = window.confirm(
-    "¿Seguro que quieres volver?\nAsegúrate de guardar los cambios antes de continuar."
-    );
-    if (confirmar) {
-     volver(pedido);
-    }
+
+  // --- Nueva función para mostrar el AlertDialog ---
+  const handleVolverConConfirmacion = () => setShowConfirmDialog(true);
+  const confirmarVolver = () => {
+    setShowConfirmDialog(false);
+    volver(pedido);
   };
 
   return (
@@ -318,17 +325,41 @@ const PurchaseDetail = ({ pedido, volver }) => {
           </VStack>
         )}
 
-
         <ExcelUploadCotizacion numeroPedido={pedido.numeroPedido} buqueId={pedido.buque_id} />
         <CotizacionProveedor numeroPedido={pedido.numeroPedido} buqueId={pedido.buque_id} />
         <Pago numeroPedido={pedido.numeroPedido} buqueId={pedido.buque_id} />
 
-
         <Button onClick={handleVolverConConfirmacion} colorScheme="gray" mt={6}>
           Volver
         </Button>
-
       </VStack>
+
+      {/* ALERT DIALOG Chakra para confirmar salida */}
+      <AlertDialog
+        isOpen={showConfirmDialog}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setShowConfirmDialog(false)}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              ¿Seguro que quieres volver?
+            </AlertDialogHeader>
+            <AlertDialogBody>
+              Asegúrate de <b>guardar los cambios</b> antes de continuar.<br />
+              <span style={{ color: "red" }}>Esta acción puede descartar cambios no guardados.</span>
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={() => setShowConfirmDialog(false)}>
+                Cancelar
+              </Button>
+              <Button colorScheme="red" onClick={confirmarVolver} ml={3}>
+                Sí, volver
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   );
 };

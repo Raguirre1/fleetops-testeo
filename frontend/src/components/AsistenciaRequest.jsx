@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Button,
@@ -19,6 +19,12 @@ import {
   MenuItem,
   useToast,
   Tooltip,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from "@chakra-ui/react";
 import { FiSave } from "react-icons/fi";
 import { FaCog } from "react-icons/fa";
@@ -27,11 +33,26 @@ import AsistenciaDetail from "./AsistenciaDetail";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import AsistenciaArchivadas from "./AsistenciaArchivadas";
-import { useFlota } from "./FlotaContext"; // ✅ nuevo
+import { useFlota } from "./FlotaContext";
 import { obtenerNombreDesdeEmail } from "./EmailUsuarios";
 
+const listarArchivosRecursivo = async (bucket, carpeta) => {
+  let archivos = [];
+  const { data: items, error } = await supabase.storage.from(bucket).list(carpeta, { limit: 1000 });
+  if (error) return archivos;
+  for (const item of items) {
+    if (item.type === "file") {
+      archivos.push(`${carpeta ? carpeta + "/" : ""}${item.name}`);
+    } else if (item.type === "folder") {
+      const subarchivos = await listarArchivosRecursivo(bucket, `${carpeta ? carpeta + "/" : ""}${item.name}`);
+      archivos = archivos.concat(subarchivos);
+    }
+  }
+  return archivos;
+};
+
 const AsistenciaRequest = ({ usuario, onBack }) => {
-  const { buques } = useFlota(); // ✅ nuevo
+  const { buques } = useFlota();
   const [buqueSeleccionado, setBuqueSeleccionado] = useState("");
   const [solicitudes, setSolicitudes] = useState([]);
   const [filtro, setFiltro] = useState("");
@@ -49,8 +70,12 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
   const [estadoFactura, setEstadoFactura] = useState({});
   const [ordenCampo, setOrdenCampo] = useState(null);
   const [ordenAscendente, setOrdenAscendente] = useState(true);
-  const [buquesDic, setBuquesDic] = useState({})
+  const [buquesDic, setBuquesDic] = useState({});
   const toast = useToast();
+
+  // 🚩 PARA ALERT DIALOG
+  const [asistenciaAEliminar, setAsistenciaAEliminar] = useState(null);
+  const cancelRef = useRef();
 
   const cargarSolicitudes = async () => {
     if (!buqueSeleccionado) return;
@@ -66,7 +91,6 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
     const { data, error } = await supabase
       .from("pagos_asistencia")
       .select("numero_ate, requiere_pago_anticipado, gestionado, factura_no_euro");
-
     if (!error && data) {
       const mapa = {};
       data.forEach((p) => {
@@ -182,7 +206,6 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
     }
   };
 
-
   const handleEditar = (s) => {
     setFormulario({
       numeroAsistencia: s.numero_ate,
@@ -195,9 +218,66 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
   };
 
   const handleEliminar = async (numeroAsistencia) => {
-    const { error } = await supabase.from("solicitudes_asistencia").delete().eq("numero_ate", numeroAsistencia);
-    if (!error) await cargarSolicitudes();
+    // 1. Elimina asistencias_proveedor asociadas
+    let { error: errorAsistProv } = await supabase
+      .from("asistencias_proveedor")
+      .delete()
+      .eq("numero_asistencia", numeroAsistencia);
+
+    // 2. Elimina pagos asociados
+    let { error: errorPagos } = await supabase
+      .from("pagos_asistencia")
+      .delete()
+      .eq("numero_ate", numeroAsistencia);
+
+    // 3. Elimina archivos de Supabase Storage (todas las subcarpetas y archivos)
+    const bucket = "asistencias";
+    const rutasAEliminar = await listarArchivosRecursivo(bucket, numeroAsistencia);
+
+    if (rutasAEliminar.length > 0) {
+      const { error: errorBorrarArchivos } = await supabase
+        .storage
+        .from(bucket)
+        .remove(rutasAEliminar);
+
+      if (errorBorrarArchivos) {
+        toast({
+          title: "Error al eliminar archivos",
+          description: errorBorrarArchivos.message,
+          status: "warning",
+          duration: 4000,
+        });
+        console.error("Error borrando archivos:", errorBorrarArchivos);
+      }
+    }
+
+    // 4. Elimina la solicitud principal
+    let { error: errorSolicitud } = await supabase
+      .from("solicitudes_asistencia")
+      .delete()
+      .eq("numero_ate", numeroAsistencia);
+
+    if (
+      !errorAsistProv &&
+      !errorPagos &&
+      !errorSolicitud
+    ) {
+      await cargarSolicitudes();
+      toast({ title: "Asistencia eliminada", status: "success", duration: 2000 });
+    } else {
+      toast({
+        title: "Error al eliminar",
+        description:
+          errorAsistProv?.message ||
+          errorPagos?.message ||
+          errorSolicitud?.message ||
+          "Error desconocido",
+        status: "error",
+        duration: 3000,
+      });
+    }
   };
+
 
   const handleVerDetalle = (s) => {
     setDetalle({
@@ -206,12 +286,11 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       urgencia: s.urgencia,
       fechaSolicitud: s.fecha_solicitud?.split("T")[0] || "—",
       numeroCuenta: s.numero_cuenta || "—",
-      buque_id: s.buque_id || "",             // ✅ Pasa el ID
+      buque_id: s.buque_id || "",
       usuario: s.usuario,
       estado: s.estado || "En Consulta",
     });
   };
-
 
   const actualizarEstado = async (numeroAsistencia, nuevoEstado) => {
     const fechaHoy = new Date().toISOString();
@@ -296,7 +375,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
   if (mostrarArchivadas) {
     return (
       <AsistenciaArchivadas
-        buqueId={buqueSeleccionado} // 👈 Añade el filtro por buque
+        buqueId={buqueSeleccionado}
         onVolver={() => {
           setMostrarArchivadas(false);
           cargarSolicitudes();
@@ -305,7 +384,6 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       />
     );
   }
-
 
   if (!buqueSeleccionado) {
     return (
@@ -321,7 +399,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       </Box>
     );
   }
-  const nombreBuqueSeleccionado = buques.find((b) => b.id === buqueSeleccionado)?.nombre || buqueSeleccionado;;
+  const nombreBuqueSeleccionado = buques.find((b) => b.id === buqueSeleccionado)?.nombre || buqueSeleccionado;
 
   return (
     <Box p={6}>
@@ -419,7 +497,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
                   <Flex gap={1} justify="center">
                     <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
                     <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
-                    <Button size="xs" onClick={() => handleEliminar(s.numero_ate)}>🗑️</Button>
+                    <Button size="xs" onClick={() => setAsistenciaAEliminar(s.numero_ate)}>🗑️</Button>
                     <Tooltip label="Archivar Asistencia" hasArrow>
                       <Button size="xs" onClick={() => archivarAsistencia(s.numero_ate)}>📦</Button>
                     </Tooltip>
@@ -440,9 +518,42 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
           </Tbody>
         </Table>
       </Box>
+
+      {/* ALERT DIALOG DE CONFIRMACIÓN */}
+      <AlertDialog
+        isOpen={!!asistenciaAEliminar}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setAsistenciaAEliminar(null)}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Confirmar eliminación
+            </AlertDialogHeader>
+            <AlertDialogBody>
+              ¿Estás seguro de que deseas <b>eliminar esta asistencia</b> y <b>TODA</b> su información asociada?<br /><br />
+              <span style={{ color: "red" }}>Esta acción no se puede deshacer.</span>
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={() => setAsistenciaAEliminar(null)}>
+                Cancelar
+              </Button>
+              <Button
+                colorScheme="red"
+                onClick={async () => {
+                  await handleEliminar(asistenciaAEliminar);
+                  setAsistenciaAEliminar(null);
+                }}
+                ml={3}
+              >
+                Sí, eliminar
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   );
-
 };
 
 export default AsistenciaRequest;

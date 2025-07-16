@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import Documentaciontecnica from "./Documentaciontecnica";
 import AsistenciaProveedor from "./AsistenciaProveedor";
@@ -18,6 +18,12 @@ import {
   Heading,
   Divider,
   useToast,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from "@chakra-ui/react";
 
 const AsistenciaDetail = ({ asistencia, volver }) => {
@@ -26,7 +32,9 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [nombreBuque, setNombreBuque] = useState("—");
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const toast = useToast();
+  const cancelRef = useRef();
 
   useEffect(() => {
     const loadData = async () => {
@@ -97,13 +105,12 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
     }
   };
 
-  const handleVolverConConfirmacion = () => {
-    const confirmar = window.confirm(
-      "¿Seguro que quieres volver?\nAsegúrate de guardar los cambios antes de continuar."
-    );
-    if (confirmar) {
-      volver(asistencia);
-    }
+  // Usar AlertDialog de Chakra UI para la confirmación
+  const handleVolverConConfirmacion = () => setShowConfirmDialog(true);
+
+  const confirmarVolver = () => {
+    setShowConfirmDialog(false);
+    volver(asistencia);
   };
 
   return (
@@ -160,6 +167,33 @@ const AsistenciaDetail = ({ asistencia, volver }) => {
           Volver
         </Button>
       </VStack>
+
+      {/* ALERT DIALOG Chakra para confirmar salida */}
+      <AlertDialog
+        isOpen={showConfirmDialog}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setShowConfirmDialog(false)}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              ¿Seguro que quieres volver?
+            </AlertDialogHeader>
+            <AlertDialogBody>
+              Asegúrate de <b>guardar los cambios</b> antes de continuar.<br />
+              <span style={{ color: "red" }}>Esta acción puede descartar cambios no guardados.</span>
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={() => setShowConfirmDialog(false)}>
+                Cancelar
+              </Button>
+              <Button colorScheme="red" onClick={confirmarVolver} ml={3}>
+                Sí, volver
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   );
 };
