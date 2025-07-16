@@ -691,14 +691,22 @@ const PurchaseRequest = ({ usuario, onBack }) => {
                 </Td>
                 <Td>
                   <Flex gap={1} justify="center">
-                    <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
-                    <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
-                    <Button size="xs" onClick={() => setPedidoAEliminar(s.numero_pedido)}>🗑️</Button>
+                    <Tooltip label="Editar pedido" hasArrow>
+                      <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
+                    </Tooltip>
+                    <Tooltip label="Ver detalles" hasArrow>
+                      <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
+                    </Tooltip>
+                    <Tooltip label="Eliminar pedido" hasArrow>
+                      <Button size="xs" onClick={() => setPedidoAEliminar(s.numero_pedido)}>🗑️</Button>
+                    </Tooltip>
                     <Tooltip label="Archivar pedido" hasArrow>
                       <Button size="xs" onClick={() => archivarPedido(s.numero_pedido)}>📦</Button>
                     </Tooltip>
                     <Menu>
-                      <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
+                      <Tooltip label="Cambiar estado" hasArrow>
+                        <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
+                      </Tooltip>
                       <MenuList>
                         {[
                           "Solicitud de Compra",

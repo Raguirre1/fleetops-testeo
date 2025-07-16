@@ -136,33 +136,32 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
 
   // --- Cargar gastos fijos y planificados ---
   const cargarPresupuestoFijo = async () => {
-    // Calcular el nombre de columna del mes (enero, febrero...)
     const mesStr = mesesDB[mesNum - 1];
 
-    // Traer Fijos y Planificados de ambas tablas
+    // Traer Fijos y Planificados de ambas tablas usando SOLO campo tipo (nuevo modelo)
     const [{ data: fijosPedidos }, { data: fijosAsistencias }] = await Promise.all([
       supabase.from("presupuestos_fijos_pedidos")
-        .select(`id, tipo, cuenta, tipo_gasto, ${mesStr}`)
+        .select(`id, nombre, cuenta, tipo, ${mesStr}`)
         .eq("buque_id", buque)
         .eq("anio", anio)
         .eq("cuenta", cuenta)
-        .or("tipo_gasto.eq.Fijo,tipo_gasto.eq.Planificado"),
+        .or("tipo.eq.Fijo,tipo.eq.Planificado"),
       supabase.from("presupuestos_fijos_asistencias")
-        .select(`id, tipo, cuenta, tipo_gasto, ${mesStr}`)
+        .select(`id, nombre, cuenta, tipo, ${mesStr}`)
         .eq("buque_id", buque)
         .eq("anio", anio)
         .eq("cuenta", cuenta)
-        .or("tipo_gasto.eq.Fijo,tipo_gasto.eq.Planificado"),
+        .or("tipo.eq.Fijo,tipo.eq.Planificado"),
     ]);
 
-    // Unifica resultados y separa por tipo_gasto
+    // Unifica resultados y separa por tipo
     const todos = [...(fijosPedidos || []), ...(fijosAsistencias || [])].map(e => ({
       ...e,
       valor: Number(e[mesStr]) || 0
     }));
 
-    setGastosFijos(todos.filter(g => g.tipo_gasto === "Fijo" && g.valor > 0));
-    setGastosPlanificados(todos.filter(g => g.tipo_gasto === "Planificado" && g.valor > 0));
+    setGastosFijos(todos.filter(g => g.tipo === "Fijo" && g.valor > 0));
+    setGastosPlanificados(todos.filter(g => g.tipo === "Planificado" && g.valor > 0));
   };
 
   useEffect(() => {
@@ -189,7 +188,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
         Tipo: "Gasto Fijo",
         Proveedor: "-",
         "Nº Referencia": "-",
-        Título: fijo.tipo || "",
+        Título: fijo.nombre || "",
         "Valor (€)": fijo.valor,
         "Cuenta contable": fijo.cuenta || "",
         Fecha: "-",
@@ -349,7 +348,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                 {gastosFijos.length > 0 && gastosFijos.map((fijo, idx) => (
                   <Tr key={`fijo-${idx}`} bg="blue.50">
                     <Td fontWeight="bold" colSpan={3}>Gasto Fijo Presupuestado</Td>
-                    <Td>{fijo.tipo}</Td>
+                    <Td>{fijo.nombre}</Td>
                     <Td isNumeric fontWeight="bold" color="blue.700">
                       {Number(fijo.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
                     </Td>
@@ -377,7 +376,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                 <AlertDescription>
                   {gastosPlanificados.map((plan, i) => (
                     <Box key={i}>
-                      <b>{plan.tipo}</b>:&nbsp;
+                      <b>{plan.nombre}</b>:&nbsp;
                       {Number(plan.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
                     </Box>
                   ))}

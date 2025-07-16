@@ -157,13 +157,13 @@ const EstadoCuentasResumen = ({ anio }) => {
         (
           (fijosPedidos?.filter(f =>
             f.cuenta === cuenta &&
-            f.tipo_gasto === "Fijo" &&
+            f.tipo === "Fijo" &&           // <--- CAMBIO AQUI
             Number(f[mesDB]) > 0
           ).reduce((a, b) => a + (parseFloat(b[mesDB]) || 0), 0) || 0)
           +
           (fijosAsistencias?.filter(f =>
             f.cuenta === cuenta &&
-            f.tipo_gasto === "Fijo" &&
+            f.tipo === "Fijo" &&           // <--- CAMBIO AQUI
             Number(f[mesDB]) > 0
           ).reduce((a, b) => a + (parseFloat(b[mesDB]) || 0), 0) || 0)
         );
@@ -171,13 +171,13 @@ const EstadoCuentasResumen = ({ anio }) => {
       // ---- Planificados ----
       const planificadosPedidos = fijosPedidos?.filter(f =>
         f.cuenta === cuenta &&
-        f.tipo_gasto === "Planificado" &&
+        f.tipo === "Planificado" &&       // <--- CAMBIO AQUI
         Number(f[mesDB]) > 0
       ) || [];
 
       const planificadosAsistencias = fijosAsistencias?.filter(f =>
         f.cuenta === cuenta &&
-        f.tipo_gasto === "Planificado" &&
+        f.tipo === "Planificado" &&       // <--- CAMBIO AQUI
         Number(f[mesDB]) > 0
       ) || [];
 

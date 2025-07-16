@@ -495,17 +495,35 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
                 </Td>
                 <Td>
                   <Flex gap={1} justify="center">
-                    <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
-                    <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
-                    <Button size="xs" onClick={() => setAsistenciaAEliminar(s.numero_ate)}>🗑️</Button>
-                    <Tooltip label="Archivar Asistencia" hasArrow>
-                      <Button size="xs" onClick={() => archivarAsistencia(s.numero_ate)}>📦</Button>
+                    <Tooltip label="Editar asistenica" hasArrow>
+                      <Button size="xs" onClick={() => handleEditar(s)}>📝</Button>
+                    </Tooltip>
+                    <Tooltip label="Ver detalles" hasArrow>
+                      <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
+                    </Tooltip>
+                    <Tooltip label="Eliminar asistencia" hasArrow>
+                      <Button size="xs" onClick={() => setPedidoAEliminar(s.numero_pedido)}>🗑️</Button>
+                    </Tooltip>
+                    <Tooltip label="Archivar asistencia" hasArrow>
+                      <Button size="xs" onClick={() => archivarPedido(s.numero_pedido)}>📦</Button>
                     </Tooltip>
                     <Menu>
-                      <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
+                      <Tooltip label="Cambiar estado" hasArrow>
+                        <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
+                      </Tooltip>
                       <MenuList>
-                        {["En Consulta", "Emitida", "Cancelada", "Realizada"].map((estado) => (
-                          <MenuItem key={estado} onClick={() => actualizarEstado(s.numero_ate, estado)}>
+                        {[
+                          "Solicitud de Compra",
+                          "En Consulta",
+                          "Pedido Activo",
+                          "Recibido",
+                          "Cancelado",
+                        ].map((estado) => (
+                          <MenuItem
+                            key={estado}
+                            onClick={() => actualizarEstado(s.numero_pedido, estado)}
+                            color={estado === "Cancelado" ? "red.500" : "inherit"}
+                          >
                             {estado}
                           </MenuItem>
                         ))}

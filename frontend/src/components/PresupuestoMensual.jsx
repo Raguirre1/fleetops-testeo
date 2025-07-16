@@ -13,12 +13,18 @@ import {
   useToast,
   HStack,
   Spinner,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
 } from "@chakra-ui/react";
 import { DownloadIcon } from "@chakra-ui/icons";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import { supabase } from "../supabaseClient";
-import PresupuestoFijo from "./PresupuestoFijo";
+import PresupuestoFijoPedidos from "./PresupuestoFijoPedidos";
+import PresupuestoFijoAsistencia from "./PresupuestoFijoAsistencia";
 
 // Asegúrate de que estos arrays están actualizados con tus cuentas y meses
 const cuentas = [
@@ -35,6 +41,7 @@ const PresupuestoMensual = ({ anio, buqueId, buqueNombre, onVolver }) => {
   const [datos, setDatos] = useState({});
   const [cargando, setCargando] = useState(true);
   const [refrescarFijo, setRefrescarFijo] = useState(false);
+  const [tabIndex, setTabIndex] = useState(0); // 0: Pedidos, 1: Asistencias
   const toast = useToast();
 
   useEffect(() => {
@@ -246,13 +253,32 @@ const PresupuestoMensual = ({ anio, buqueId, buqueNombre, onVolver }) => {
         </Tbody>
       </Table>
 
+      {/* Selector visual entre Presupuesto Fijo de Pedidos y de Asistencia */}
       <Box mt={10}>
-        <PresupuestoFijo
-          anio={anio}
-          buqueId={buqueId}
-          buqueNombre={buqueNombre}
-          onRefrescar={() => setRefrescarFijo(!refrescarFijo)}
-        />
+        <Tabs variant="enclosed" index={tabIndex} onChange={setTabIndex} colorScheme="teal">
+          <TabList>
+            <Tab>Presupuesto Fijo Pedidos</Tab>
+            <Tab>Presupuesto Fijo Asistencias</Tab>
+          </TabList>
+          <TabPanels>
+            <TabPanel>
+              <PresupuestoFijoPedidos
+                anio={anio}
+                buqueId={buqueId}
+                buqueNombre={buqueNombre}
+                onRefrescar={() => setRefrescarFijo(!refrescarFijo)}
+              />
+            </TabPanel>
+            <TabPanel>
+              <PresupuestoFijoAsistencia
+                anio={anio}
+                buqueId={buqueId}
+                buqueNombre={buqueNombre}
+                onRefrescar={() => setRefrescarFijo(!refrescarFijo)}
+              />
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
       </Box>
     </Box>
   );
