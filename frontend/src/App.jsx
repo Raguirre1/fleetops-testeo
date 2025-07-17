@@ -12,6 +12,7 @@ import {
   Flex,
   extendTheme,
   useToast,
+  Spinner,
 } from "@chakra-ui/react";
 import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -26,6 +27,7 @@ import DashboardGeneral from "./components/DashboardGeneral";
 import { FlotaProvider, useFlota } from "./components/FlotaContext";
 import { supabase } from "./supabaseClient";
 import { obtenerNombreDesdeEmail } from "./components/EmailUsuarios";
+import { exportarPedidosBuque, exportarFlotaCompleta } from "./utils/exportarInfoSupabase";
 
 const theme = extendTheme({
   styles: {
@@ -39,9 +41,11 @@ const theme = extendTheme({
 });
 
 function MainApp({ usuario, setUsuario }) {
-  const { flotaSeleccionada, setFlotaSeleccionada } = useFlota();
+  const { flotaSeleccionada, setFlotaSeleccionada, buques } = useFlota();
   const navigate = useNavigate();
   const [mostrarDashboard, setMostrarDashboard] = useState(true);
+  const [buqueSeleccionado, setBuqueSeleccionado] = useState("");
+  const [descargando, setDescargando] = useState(false);
   const toast = useToast();
 
   const cerrarSesion = async (mensaje = null) => {
@@ -78,56 +82,136 @@ function MainApp({ usuario, setUsuario }) {
     return <DashboardGeneral onIrAModulos={() => setMostrarDashboard(false)} />;
 
   return (
-    <Box minH="100vh" bg="gray.50">
-      <Flex
-        as="header"
-        bg="#cce5ff"
-        color="gray.800"
-        px={6}
-        py={4}
-        justify="space-between"
-        align="center"
-        shadow="sm"
-      >
-        <Text fontSize="lg" fontWeight="bold">
-          {obtenerNombreDesdeEmail(usuario?.email)} | Flota: {flotaSeleccionada.nombre}
-        </Text>
-        <Flex gap={2}>
-          <Button colorScheme="teal" onClick={() => setMostrarDashboard(true)}>
-            🏠 Ir al Dashboard
-          </Button>
-          <Button colorScheme="yellow" onClick={cambiarFlota}>
-            Seleccionar Flota
-          </Button>
-          <Button colorScheme="red" onClick={() => cerrarSesion()}>
-            Cerrar sesión
-          </Button>
-        </Flex>
-      </Flex>
+    <>
+      {/* SPINNER/OVERLAY de descarga */}
+      {descargando && (
+        <Box
+          position="fixed"
+          left={0}
+          top={0}
+          width="100vw"
+          height="100vh"
+          bg="rgba(255,255,255,0.75)"
+          zIndex={9999}
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Text fontSize="xl" mb={4} fontWeight="bold" color="blue.600">
+            Descargando datos y archivos...
+          </Text>
+          <Spinner size="xl" color="blue.500" thickness="5px" speed="0.6s" />
+        </Box>
+      )}
 
-      <Tabs variant="enclosed" isFitted p={4}>
-        <TabList>
-          <Tab>🛒 Compras</Tab>
-          <Tab>🔧 Asistencias Técnicas</Tab>
-          <Tab>📊 Controlling</Tab>
-          <Tab>📁 SGC</Tab>
-        </TabList>
-        <TabPanels mt={4}>
-          <TabPanel>
-            <PurchaseRequest usuario={usuario} />
-          </TabPanel>
-          <TabPanel>
-            <AsistenciaRequest usuario={usuario} />
-          </TabPanel>
-          <TabPanel>
-            <Controlling />
-          </TabPanel>
-          <TabPanel>
-            <Text fontSize="lg">Módulo del Sistema de Gestión de Calidad</Text>
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
-    </Box>
+      <Box minH="100vh" bg="gray.50">
+        <Flex
+          as="header"
+          bg="#cce5ff"
+          color="gray.800"
+          px={6}
+          py={4}
+          justify="space-between"
+          align="center"
+          shadow="sm"
+        >
+          <Text fontSize="lg" fontWeight="bold">
+            {obtenerNombreDesdeEmail(usuario?.email)} | Flota: {flotaSeleccionada.nombre}
+          </Text>
+          <Flex gap={2} align="center">
+            <Button colorScheme="teal" onClick={() => setMostrarDashboard(true)}>
+              🏠 Ir al Dashboard
+            </Button>
+
+            {/* --- SOLO ADMIN: Selector de buque y botones de exportación --- */}
+            {usuario?.email === "raguirre@cotenaval.es" && (
+              <>
+                <Box display="flex" alignItems="center" gap={2}>
+                  <Text fontSize="sm">Exportar pedidos del buque:</Text>
+                  <select
+                    value={buqueSeleccionado}
+                    onChange={e => setBuqueSeleccionado(e.target.value)}
+                    style={{
+                      marginRight: 8,
+                      padding: 4,
+                      borderRadius: 6,
+                      border: "1px solid #b3b3b3",
+                      fontSize: "1em",
+                    }}
+                  >
+                    <option value="">Selecciona buque</option>
+                    {buques && buques.map(b =>
+                      <option key={b.id} value={b.id}>{b.nombre}</option>
+                    )}
+                  </select>
+                  <Button
+                    colorScheme="blue"
+                    onClick={async () => {
+                      setDescargando(true);
+                      try {
+                        await exportarPedidosBuque(buqueSeleccionado);
+                      } finally {
+                        setDescargando(false);
+                      }
+                    }}
+                    isDisabled={!buqueSeleccionado}
+                  >
+                    📦 Exportar pedidos
+                  </Button>
+                </Box>
+                {/* --- Fin selector buque --- */}
+
+                {/* --- Exportar toda la flota --- */}
+                <Button
+                  colorScheme="purple"
+                  onClick={async () => {
+                    setDescargando(true);
+                    try {
+                      await exportarFlotaCompleta(flotaSeleccionada.id);
+                    } finally {
+                      setDescargando(false);
+                    }
+                  }}
+                >
+                  📦 Exportar flota completa
+                </Button>
+              </>
+            )}
+
+            <Button colorScheme="yellow" onClick={cambiarFlota}>
+              Seleccionar Flota
+            </Button>
+            <Button colorScheme="red" onClick={() => cerrarSesion()}>
+              Cerrar sesión
+            </Button>
+          </Flex>
+        </Flex>
+
+        <Tabs variant="enclosed" isFitted p={4}>
+          <TabList>
+            <Tab>🛒 Compras</Tab>
+            <Tab>🔧 Asistencias Técnicas</Tab>
+            <Tab>📊 Controlling</Tab>
+            <Tab>📁 SGC</Tab>
+          </TabList>
+          <TabPanels mt={4}>
+            <TabPanel>
+              <PurchaseRequest usuario={usuario} />
+            </TabPanel>
+            <TabPanel>
+              <AsistenciaRequest usuario={usuario} />
+            </TabPanel>
+            <TabPanel>
+              <Controlling />
+            </TabPanel>
+            <TabPanel>
+              <Text fontSize="lg">Módulo del Sistema de Gestión de Calidad</Text>
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+      </Box>
+    </>
   );
 }
 
