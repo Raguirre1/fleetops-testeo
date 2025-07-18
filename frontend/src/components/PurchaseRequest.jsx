@@ -113,16 +113,26 @@ const PurchaseRequest = ({ usuario, onBack }) => {
     const { data, error } = await supabase
       .from("cotizaciones_proveedor")
       .select("numero_pedido, estado, valor_factura");
+
     if (!error && data) {
+      // Creamos un mapa por nº de pedido:
       const mapa = {};
       data.forEach((c) => {
-        if (c.estado === "aceptada" && (!c.valor_factura || Number(c.valor_factura) === 0)) {
-          mapa[c.numero_pedido] = true;
+        // Solo miramos cotizaciones aceptadas
+        if (!mapa[c.numero_pedido]) {
+          mapa[c.numero_pedido] = { aceptada: false, factura: false };
+        }
+        if (c.estado === "aceptada") {
+          mapa[c.numero_pedido].aceptada = true;
+          if (c.valor_factura && Number(c.valor_factura) > 0) {
+            mapa[c.numero_pedido].factura = true;
+          }
         }
       });
       setEstadoFactura(mapa);
     }
   };
+
 
   useEffect(() => {
     cargarSolicitudes();
@@ -681,12 +691,18 @@ const PurchaseRequest = ({ usuario, onBack }) => {
                 <Td>{s.numero_cuenta || "-"}</Td>
                 <Td>{estadosPago[s.numero_pedido] || "-"}</Td>
                 <Td>
-                  {estadoFactura[s.numero_pedido] ? (
-                    <Tooltip label="Falta cargar la factura final" hasArrow>
-                      <span>🟡</span>
-                    </Tooltip>
+                  {estadoFactura[s.numero_pedido]?.aceptada ? (
+                    estadoFactura[s.numero_pedido]?.factura ? (
+                      <Tooltip label="Factura final registrada" hasArrow>
+                        <span style={{ color: "green" }}>✅</span>
+                      </Tooltip>
+                    ) : (
+                      <Tooltip label="Falta cargar la factura final" hasArrow>
+                        <span>🟡</span>
+                      </Tooltip>
+                    )
                   ) : (
-                    "✅"
+                    <span style={{ color: "#aaa" }}>—</span>
                   )}
                 </Td>
                 <Td>

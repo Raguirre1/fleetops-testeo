@@ -117,17 +117,21 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
     if (!error && data) {
       const mapa = {};
       data.forEach((a) => {
-        const valor = parseFloat(a.valor_factura);
-        if (
-          a.estado === "aceptada" &&
-          (!a.valor_factura || isNaN(valor) || valor <= 0)
-        ) {
-          mapa[a.numero_asistencia] = true;
+        if (!mapa[a.numero_asistencia]) {
+          mapa[a.numero_asistencia] = { aceptada: false, factura: false };
+        }
+        if (a.estado === "aceptada") {
+          mapa[a.numero_asistencia].aceptada = true;
+          const valor = parseFloat(a.valor_factura);
+          if (a.valor_factura && !isNaN(valor) && valor > 0) {
+            mapa[a.numero_asistencia].factura = true;
+          }
         }
       });
       setEstadoFactura(mapa);
     }
   };
+
 
   useEffect(() => {
     cargarSolicitudes();
@@ -485,12 +489,18 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
                 <Td>{s.numero_cuenta || "-"}</Td>
                 <Td>{estadosPago[s.numero_ate] || "-"}</Td>
                 <Td>
-                  {estadoFactura[s.numero_ate] ? (
-                    <Tooltip label="Falta cargar la factura final" hasArrow>
-                      <span>🟡</span>
-                    </Tooltip>
+                  {estadoFactura[s.numero_ate]?.aceptada ? (
+                    estadoFactura[s.numero_ate]?.factura ? (
+                      <Tooltip label="Factura final registrada" hasArrow>
+                        <span style={{ color: "green" }}>✅</span>
+                      </Tooltip>
+                    ) : (
+                      <Tooltip label="Falta cargar la factura final" hasArrow>
+                        <span>🟡</span>
+                      </Tooltip>
+                    )
                   ) : (
-                    "✅"
+                    <span style={{ color: "#aaa" }}>—</span>
                   )}
                 </Td>
                 <Td>

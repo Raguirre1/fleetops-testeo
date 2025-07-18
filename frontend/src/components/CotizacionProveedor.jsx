@@ -56,35 +56,55 @@ const CotizacionProveedor = ({ numeroPedido, buqueId }) => {
   };
 
   const handleRemoveCotizacion = async (index) => {
-    const proveedor = cotizaciones[index].proveedor;
+    const cot = cotizaciones[index];
+    const proveedor = cot.proveedor;
 
-    if (proveedor && proveedor.trim() !== "") {
-      try {
-        const { error } = await supabase
-          .from("cotizaciones_proveedor")
-          .delete()
-          .match({
-            numero_pedido: numeroPedido,
-            buque_id: buqueId,
-            proveedor
-          });
-
-        if (error) {
-          console.error("Error al borrar proveedor en Supabase:", error);
-          toast({ title: "Error al borrar en Supabase", status: "error" });
-          return;
-        }
-
-        toast({ title: `Proveedor "${proveedor}" eliminado`, status: "info" });
-      } catch (err) {
-        console.error(err);
-        toast({ title: "Error al eliminar", status: "error" });
-      }
+    if (!proveedor || proveedor.trim() === "") {
+      // Solo elimina del estado local
+      setCotizaciones(cotizaciones.filter((_, i) => i !== index));
+      return;
     }
 
-    const updated = cotizaciones.filter((_, i) => i !== index);
-    setCotizaciones(updated);
+    // 1. Elimina archivos en Supabase Storage si existen
+    try {
+      if (cot.path_cotizacion) {
+        await deleteFileFromSupabase(cot.path_cotizacion);
+      }
+      if (cot.path_invoice) {
+        await deleteFileFromSupabase(cot.path_invoice);
+      }
+    } catch (err) {
+      // No detiene la eliminación de BD pero muestra aviso
+      toast({ title: "Error al borrar archivos PDF", status: "warning" });
+    }
+
+    // 2. Elimina el registro en la tabla de Supabase
+    try {
+      const { error } = await supabase
+        .from("cotizaciones_proveedor")
+        .delete()
+        .match({
+          numero_pedido: numeroPedido,
+          buque_id: buqueId,
+          proveedor
+        });
+
+      if (error) {
+        console.error("Error al borrar proveedor en Supabase:", error);
+        toast({ title: "Error al borrar en Supabase", status: "error" });
+        return;
+      }
+
+      toast({ title: `Proveedor "${proveedor}" eliminado`, status: "info" });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Error al eliminar", status: "error" });
+    }
+
+    // 3. Elimina del estado local
+    setCotizaciones((prev) => prev.filter((_, i) => i !== index));
   };
+
 
   const handleChange = (index, field, value) => {
     const updated = [...cotizaciones];
