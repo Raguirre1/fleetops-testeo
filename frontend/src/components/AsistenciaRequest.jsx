@@ -512,10 +512,10 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
                       <Button size="xs" onClick={() => handleVerDetalle(s)}>👁️</Button>
                     </Tooltip>
                     <Tooltip label="Eliminar asistencia" hasArrow>
-                      <Button size="xs" onClick={() => setPedidoAEliminar(s.numero_pedido)}>🗑️</Button>
+                      <Button size="xs" onClick={() => setAsistenciaAEliminar(s.numero_ate)}>🗑️</Button>
                     </Tooltip>
                     <Tooltip label="Archivar asistencia" hasArrow>
-                      <Button size="xs" onClick={() => archivarPedido(s.numero_pedido)}>📦</Button>
+                      <Button size="xs" onClick={() => archivarAsistencia(s.numero_ate)}>📦</Button>
                     </Tooltip>
                     <Menu>
                       <Tooltip label="Cambiar estado" hasArrow>
@@ -523,15 +523,15 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
                       </Tooltip>
                       <MenuList>
                         {[
-                          "Solicitud de Compra",
+                          "Solicitud de Asistencia",
                           "En Consulta",
-                          "Pedido Activo",
-                          "Recibido",
+                          "Emitida",
+                          "Realizada",
                           "Cancelado",
                         ].map((estado) => (
                           <MenuItem
                             key={estado}
-                            onClick={() => actualizarEstado(s.numero_pedido, estado)}
+                            onClick={() => actualizarEstado(s.numero_ate, estado)}
                             color={estado === "Cancelado" ? "red.500" : "inherit"}
                           >
                             {estado}

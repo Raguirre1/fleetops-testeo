@@ -107,6 +107,12 @@ const AsistenciaProveedor = ({ numeroAsistencia, buqueId }) => {
   };
 
 
+  const handleChange = (index, field, value) => {
+    const updated = [...cotizaciones];
+    updated[index][field] = value;
+    setCotizaciones(updated);
+  };
+
   const uploadFile = async (file, tipo, proveedor) => {
     const sanitizedProveedor = proveedor.replace(/[^a-zA-Z0-9_-]/g, "_");
     const path = `${numeroAsistencia}/${sanitizedProveedor}/${tipo}-${Date.now()}.pdf`;
