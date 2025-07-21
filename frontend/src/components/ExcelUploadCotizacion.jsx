@@ -18,6 +18,7 @@ import {
 import { CloseIcon } from "@chakra-ui/icons";
 import PropTypes from "prop-types";
 import * as XLSX from "xlsx";
+import mammoth from "mammoth";
 import { supabase } from "../supabaseClient";
 
 const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
@@ -57,46 +58,73 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
     fetchItems();
   }, [numeroPedido, buqueId]);
 
-  const processExcel = async (file) => {
+  const processWord = async (file) => {
     const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+    reader.onload = async (e) => {
+      const arrayBuffer = e.target.result;
+      const { value: rawText } = await mammoth.extractRawText({ arrayBuffer });
 
-      const formattedItems = jsonData.map((row, index) => ({
-        numero_pedido: numeroPedido,
-        buque_id: buqueId,
-        item: row["Item"] || index + 1,
-        descripcion: row["Nombre/Título"] || row["Descripción"] || row["Nombre"] || "",
-        referencia: row["Ref. Fabricante"] || row["Referencia"] || "",
-        cantidad: row["Cantidad"] || 1,
-        unidad: row["Unidad"] || "Unit",
-        precios: {},
-      }));
+      const lines = rawText
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l !== "");
 
-      if (formattedItems.length === 0) {
-        toast({ title: "El archivo no contiene datos reconocibles", status: "warning" });
+      const itemsDetectados = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const cantidadMatch = lines[i].match(/^(\d+)\s*(unit|units|meter|meters|pcs)?$/i);
+        if (cantidadMatch) {
+          const cantidad = parseInt(cantidadMatch[1]);
+          const unidad = cantidadMatch[2] ? cantidadMatch[2].toLowerCase() : "unit";
+          const descripcion = [];
+
+          for (let j = 1; j <= 3 && i + j < lines.length; j++) {
+            if (!/^\d+(\.\d+)?\s*(unit|units|meter|pcs)?$/i.test(lines[i + j])) {
+              descripcion.push(lines[i + j]);
+            }
+          }
+
+          let referencia = "";
+          for (let k = Math.max(0, i - 2); k <= i + 4 && k < lines.length; k++) {
+            const refMatch = lines[k].match(/\b\d{2,}-\d{4,}\b/);
+            if (refMatch) {
+              referencia = refMatch[0];
+              break;
+            }
+          }
+
+          itemsDetectados.push({
+            numero_pedido: numeroPedido,
+            buque_id: buqueId,
+            item: itemsDetectados.length + 1,
+            descripcion: descripcion.join(" "),
+            referencia,
+            cantidad,
+            unidad,
+            precios: {},
+          });
+        }
+      }
+
+      if (itemsDetectados.length === 0) {
+        toast({ title: "No se encontraron ítems en el archivo Word", status: "warning" });
         return;
       }
 
       try {
-        const { error } = await supabase.from("lineas_cotizacion").upsert(formattedItems, {
+        const { error } = await supabase.from("lineas_cotizacion").upsert(itemsDetectados, {
           onConflict: ["numero_pedido", "buque_id", "item"],
         });
 
         if (error) throw error;
 
-        setItems(formattedItems);
-        toast({ title: "Archivo procesado y datos guardados", status: "success" });
+        setItems(itemsDetectados);
+        toast({ title: "Archivo Word procesado y datos guardados", status: "success" });
       } catch (err) {
         console.error("Error al guardar en Supabase:", err);
         toast({ title: "Error al guardar los datos", status: "error" });
       }
     };
-
     reader.readAsArrayBuffer(file);
   };
 
@@ -104,7 +132,14 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
     const file = e.target.files[0];
     if (file) {
       setNombreArchivo(file.name);
-      processExcel(file);
+      const ext = file.name.split(".").pop().toLowerCase();
+      if (ext === "xlsx" || ext === "xls") {
+        processExcel(file);
+      } else if (ext === "docx") {
+        processWord(file);
+      } else {
+        toast({ title: "Formato no compatible. Usa Excel o Word.", status: "error" });
+      }
     }
   };
 
@@ -114,7 +149,14 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
     const file = e.dataTransfer.files[0];
     if (file) {
       setNombreArchivo(file.name);
-      processExcel(file);
+      const ext = file.name.split(".").pop().toLowerCase();
+      if (ext === "xlsx" || ext === "xls") {
+        processExcel(file);
+      } else if (ext === "docx") {
+        processWord(file);
+      } else {
+        toast({ title: "Formato no compatible. Usa Excel o Word.", status: "error" });
+      }
     }
   };
 
@@ -263,7 +305,7 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
         }}
       >
         <Text fontWeight="medium">
-          {isDragging ? "¡Suelta el archivo Excel aquí!" : "Arrastra el archivo Excel aquí"}
+          {isDragging ? "¡Suelta el archivo Excel o Word aquí!" : "Arrastra el archivo Excel o Word aquí"}
         </Text>
         <Input
           type="file"
