@@ -353,6 +353,24 @@ const PurchaseRequest = ({ usuario, onBack }) => {
       toast({ title: "Error al guardar", description: error.message, status: "error", duration: 3000 });
     }
   };
+  const archivarPedido = async (numeroPedido) => {
+    const { error } = await supabase
+      .from("solicitudes_compra")
+      .update({ archivado: true })
+      .eq("numero_pedido", numeroPedido);
+
+    if (!error) {
+      toast({ title: "Pedido archivado", status: "info", duration: 2000 });
+      await cargarSolicitudes();
+    } else {
+      toast({
+        title: "Error al archivar",
+        description: error.message,
+        status: "error",
+        duration: 3000,
+      });
+    }
+  };
 
 
   const exportarAExcel = () => {
