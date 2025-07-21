@@ -424,7 +424,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       </Flex>
 
       <Box as="form" onSubmit={handleSubmit} mb={6} display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={4}>
-        <Input name="numeroAsistencia" value={formulario.numeroAsistencia} onChange={handleChange} placeholder="Nº Asistencia" required={!editarId} isDisabled={!!editarId} />
+        <Input name="numeroAsistencia" value={formulario.numeroAsistencia} onChange={handleChange} placeholder="Nº Asistencia" required />
         <Input name="tituloAsistencia" value={formulario.tituloAsistencia} onChange={handleChange} placeholder="Título" required />
         <Input name="urgencia" value={formulario.urgencia} onChange={handleChange} placeholder="Urgencia" />
         <Input type="date" name="fechaSolicitud" value={formulario.fechaSolicitud} onChange={handleChange} />
