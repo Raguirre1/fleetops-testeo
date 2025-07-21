@@ -170,8 +170,9 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // 🚨 Validación ANTES de hacer nada más
     const numero = formulario.numeroAsistencia;
+
+    // Validación: bloquear si contiene "/"
     if (numero.includes("/")) {
       toast({
         title: "Nº de asistencia inválido",
@@ -184,7 +185,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
     }
 
     const datos = {
-      numero_ate: formulario.numeroAsistencia,
+      numero_ate: numero,
       titulo_ate: formulario.tituloAsistencia,
       urgencia: formulario.urgencia,
       fecha_solicitud: formulario.fechaSolicitud || null,
@@ -192,12 +193,63 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       buque_id: buqueSeleccionado,
       usuario: obtenerNombreDesdeEmail(usuario?.email),
     };
-    let error;
+
+    let error = null;
+
     if (editarId) {
+      const cambioNumero = numero !== editarId;
+      const bucket = "asistencias";
+
+      if (cambioNumero) {
+        // 1. Copiar archivos al nuevo número
+        const archivos = await listarArchivosRecursivo(bucket, editarId);
+        for (const oldPath of archivos) {
+          const newPath = oldPath.replace(editarId, numero);
+          await supabase.storage.from(bucket).copy(oldPath, newPath);
+        }
+
+        // 2. Actualizar paths en asistencias_proveedor
+        const { data: cotizaciones } = await supabase
+          .from("asistencias_proveedor")
+          .select("id, path_cotizacion, path_invoice")
+          .eq("numero_asistencia", editarId);
+
+        for (const cotiz of cotizaciones || []) {
+          const nuevosPaths = {};
+          if (cotiz.path_cotizacion?.startsWith(editarId)) {
+            nuevosPaths.path_cotizacion = cotiz.path_cotizacion.replace(editarId, numero);
+          }
+          if (cotiz.path_invoice?.startsWith(editarId)) {
+            nuevosPaths.path_invoice = cotiz.path_invoice.replace(editarId, numero);
+          }
+          if (Object.keys(nuevosPaths).length > 0) {
+            await supabase.from("asistencias_proveedor").update(nuevosPaths).eq("id", cotiz.id);
+          }
+        }
+
+        // 3. Actualizar número de asistencia en tablas relacionadas
+        await supabase
+          .from("asistencias_proveedor")
+          .update({ numero_asistencia: numero })
+          .eq("numero_asistencia", editarId);
+
+        await supabase
+          .from("pagos_asistencia")
+          .update({ numero_ate: numero })
+          .eq("numero_ate", editarId);
+
+        // 4. Eliminar archivos antiguos
+        if (archivos.length > 0) {
+          await supabase.storage.from(bucket).remove(archivos);
+        }
+      }
+
+      // 5. Actualizar solicitud principal
       const { error: updateError } = await supabase
         .from("solicitudes_asistencia")
         .update(datos)
         .eq("numero_ate", editarId);
+
       error = updateError;
     } else {
       const { error: insertError } = await supabase
@@ -205,6 +257,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
         .insert([datos]);
       error = insertError;
     }
+
     if (!error) {
       setFormulario({
         numeroAsistencia: "",
@@ -220,6 +273,7 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       toast({ title: "Error al guardar", description: error.message, status: "error", duration: 3000 });
     }
   };
+
 
   const handleEditar = (s) => {
     setFormulario({
