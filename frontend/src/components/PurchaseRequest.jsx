@@ -51,6 +51,17 @@ const listarArchivosRecursivo = async (bucket, carpeta) => {
   }
   return archivos;
 };
+const cuentasContables = [
+  "Casco",
+  "Máquinas",
+  "Electricidad",
+  "Electrónicas",
+  "SEP",
+  "Fonda",
+  "MLC",
+  "Aceite",
+  "Inversiones"
+];
 
 const PurchaseRequest = ({ usuario, onBack }) => {
   const { buques } = useFlota();
@@ -631,7 +642,17 @@ const PurchaseRequest = ({ usuario, onBack }) => {
         <Input name="urgencia" value={formulario.urgencia} onChange={handleChange} placeholder="Urgencia" />
         <Input type="date" name="fechaPedido" value={formulario.fechaPedido} onChange={handleChange} />
         <Input type="date" name="fechaEntrega" value={formulario.fechaEntrega} onChange={handleChange} />
-        <Input name="numeroCuenta" value={formulario.numeroCuenta} onChange={handleChange} placeholder="Cuenta contable" />
+        <Select
+          name="numeroCuenta"
+          value={formulario.numeroCuenta}
+          onChange={handleChange}
+          placeholder="Selecciona cuenta contable"
+        >
+          {cuentasContables.map((cuenta) => (
+            <option key={cuenta} value={cuenta}>{cuenta}</option>
+          ))}
+        </Select>
+
         <Button type="submit" colorScheme="green" leftIcon={<FiSave />} gridColumn={{ base: "span 1", md: "span 3" }}>Guardar</Button>
       </Box>
 
