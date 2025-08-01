@@ -211,7 +211,7 @@ const PurchaseDetail = ({ pedido, volver }) => {
   };
 
   return (
-    <Box p={6} maxW="4xl" mx="auto">
+    <Box p={6} maxW="6xl" mx="auto">
       <Box mb={6} p={4} bg="gray.100" borderRadius="md">
         <Heading size="md" color="blue.600" mb={2}>📦 Detalle del Pedido</Heading>
         <Text><strong>Nº Pedido:</strong> {pedido.numeroPedido}</Text>
