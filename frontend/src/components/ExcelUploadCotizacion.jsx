@@ -44,7 +44,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
       } else {
         setItems(data || []);
 
-        // Extraer proveedores únicos de los precios
         const proveedoresSet = new Set();
         (data || []).forEach(item => {
           if (item.precios) {
@@ -113,7 +112,8 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
       }
 
       try {
-        const { error } = await supabase.from("lineas_cotizacion").upsert(itemsDetectados, {
+        const datosSinId = itemsDetectados.map(({ id, ...rest }) => rest);
+        const { error } = await supabase.from("lineas_cotizacion").upsert(datosSinId, {
           onConflict: ["numero_pedido", "buque_id", "item"],
         });
 
@@ -128,6 +128,7 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
     };
     reader.readAsArrayBuffer(file);
   };
+
   const processExcel = async (file) => {
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -154,7 +155,8 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
       }
 
       try {
-        const { error } = await supabase.from("lineas_cotizacion").upsert(formattedItems, {
+        const datosSinId = formattedItems.map(({ id, ...rest }) => rest);
+        const { error } = await supabase.from("lineas_cotizacion").upsert(datosSinId, {
           onConflict: ["numero_pedido", "buque_id", "item"],
         });
 
@@ -245,13 +247,11 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
     const updated = [...items];
     if (!updated[index].precios) updated[index].precios = {};
 
-    // Permitir escribir valores parciales (ej: ".", "12.", "12.3")
     if (value === "" || value === "." || value === "-" || /^-?\d*\.?\d*$/.test(value)) {
-      updated[index].precios[proveedor] = value; // guardamos como string temporal
+      updated[index].precios[proveedor] = value;
       setItems(updated);
     }
   };
-
 
   const handleAddProveedor = () => {
     const nombreManual = prompt("Introduce el nombre del nuevo proveedor:");
@@ -286,7 +286,8 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
         buque_id: buqueId,
         numero_pedido: numeroPedido,
       }));
-      const { error } = await supabase.from("lineas_cotizacion").upsert(itemsWithBuqueId, {
+      const datosSinId = itemsWithBuqueId.map(({ id, ...rest }) => rest);
+      const { error } = await supabase.from("lineas_cotizacion").upsert(datosSinId, {
         onConflict: ["numero_pedido", "buque_id", "item"],
       });
       if (error) throw error;
@@ -321,7 +322,7 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
 
   const totalesProveedores = proveedores.reduce((acc, prov) => {
     acc[prov] = items.reduce((sum, item) => {
-      const precioUnit = item.precios?.[prov] || 0;
+      const precioUnit = parseFloat(item.precios?.[prov]) || 0;
       const cantidad = item.cantidad || 0;
       return sum + precioUnit * cantidad;
     }, 0);
@@ -334,7 +335,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
         Línea de Pedidos
       </Text>
 
-      {/* Zona Drag & Drop */}
       <Box
         border="2px dashed"
         borderColor={isDragging ? "blue.300" : "gray.300"}
@@ -382,7 +382,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
         )}
       </Box>
 
-      {/* Botones principales */}
       <HStack spacing={3} mb={4} flexWrap="wrap">
         <Button onClick={handleExportToExcel} colorScheme="green">
           📤 Exportar Excel
@@ -396,7 +395,7 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
           </Button>
         )}
       </HStack>
-      {/* Tabla de ítems */}
+
       <Box w="100%">
         <Table variant="simple" size="sm" w="100%">
           <Thead bg="gray.100">
@@ -408,21 +407,9 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
               <Th>Unidad</Th>
               {proveedores.map((prov) => (
                 <React.Fragment key={prov}>
-                  <Th 
-                    minW="160px" 
-                    whiteSpace="normal" 
-                    wordBreak="break-word" 
-                    textAlign="center"
-                  >
+                  <Th minW="160px" textAlign="center">
                     <HStack justify="space-between" align="start">
-                      <Text 
-                        fontSize="sm" 
-                        whiteSpace="normal" 
-                        wordBreak="break-word" 
-                        textAlign="center"
-                      >
-                        {prov} €/u
-                      </Text>
+                      <Text fontSize="sm">{prov} €/u</Text>
                       <IconButton
                         size="xs"
                         icon={<CloseIcon />}
@@ -433,19 +420,11 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
                       />
                     </HStack>
                   </Th>
-                  <Th 
-                    minW="140px" 
-                    fontSize="sm" 
-                    whiteSpace="normal" 
-                    wordBreak="break-word" 
-                    textAlign="center"
-                  >
+                  <Th minW="140px" fontSize="sm" textAlign="center">
                     {prov} Total
                   </Th>
                 </React.Fragment>
               ))}
-
-
               <Th>Acciones</Th>
             </Tr>
           </Thead>
@@ -461,27 +440,20 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
                 {items.map((item, index) => (
                   <Tr key={index}>
                     <Td>{item.item}</Td>
-
-                    {/* Columna Descripción con Textarea */}
                     <Td>
                       <Textarea
                         value={item.descripcion}
                         onChange={(e) => {
                           handleChange(index, "descripcion", e.target.value);
-                          e.target.style.height = "auto"; // reset altura
-                          e.target.style.height = e.target.scrollHeight + "px"; // ajusta a contenido
+                          e.target.style.height = "auto";
+                          e.target.style.height = e.target.scrollHeight + "px";
                         }}
                         resize="none"
                         overflow="hidden"
-                        whiteSpace="normal"
-                        wordBreak="break-word"
                         minH="40px"
                         fontSize="sm"
                       />
-
                     </Td>
-
-                    {/* Columna Referencia */}
                     <Td>
                       <Input
                         value={item.referencia}
@@ -490,8 +462,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
                         }
                       />
                     </Td>
-
-                    {/* Columna Cantidad */}
                     <Td>
                       <Input
                         type="number"
@@ -505,8 +475,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
                         }
                       />
                     </Td>
-
-                    {/* Columna Unidad */}
                     <Td>
                       <Input
                         value={item.unidad}
@@ -515,8 +483,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
                         }
                       />
                     </Td>
-
-                    {/* Columnas dinámicas por proveedor */}
                     {proveedores.map((prov) => {
                       const precioUnit = parseFloat(item.precios?.[prov]) || 0;
                       const total = precioUnit * (item.cantidad || 0);
@@ -539,8 +505,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
                         </React.Fragment>
                       );
                     })}
-
-                    {/* Columna Acciones */}
                     <Td>
                       <Button
                         size="sm"
@@ -551,10 +515,7 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
                       </Button>
                     </Td>
                   </Tr>
-
                 ))}
-
-                {/* Fila de totales */}
                 <Tr fontWeight="bold" bg="gray.100">
                   <Td colSpan={5} textAlign="right">
                     Total
@@ -573,8 +534,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
         </Table>
       </Box>
 
-
-      {/* Botones inferiores */}
       <HStack spacing={4} mt={4}>
         <Button onClick={handleAddItem} colorScheme="gray">
           Añadir ítem manual
@@ -585,7 +544,6 @@ const ExcelUploadCotizacion = ({ numeroPedido, buqueId }) => {
       </HStack>
     </Box>
   );
-
 };
 
 ExcelUploadCotizacion.propTypes = {

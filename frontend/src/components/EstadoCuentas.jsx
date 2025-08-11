@@ -17,6 +17,18 @@ const mesesDB = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
 ];
+const ORDEN_CUENTAS = [
+  "Casco",
+  "Máquinas",
+  "Electricidad",
+  "Electrónicas",
+  "SEP",
+  "Fonda",
+  "MLC",
+  "Aceite",
+  "Inversiones",
+];
+
 
 // Para evitar errores de meses faltantes:
 const normalizaMeses = (obj) => {
@@ -50,6 +62,18 @@ const EstadoCuentasResumen = ({ anio }) => {
   const cargarResumen = async () => {
     setLoading(true);
 
+    const ORDEN_CUENTAS = [
+      "Casco",
+      "Máquinas",
+      "Electricidad",
+      "Electrónicas",
+      "SEP",
+      "Fonda",
+      "MLC",
+      "Aceite",
+      "Inversiones",
+    ];
+
     // 1. Leer presupuesto mensual (NO SE USA PARA FIJOS/PLANIFICADOS)
     const { data: presupuestos } = await supabase
       .from('presupuesto_mensual')
@@ -57,7 +81,7 @@ const EstadoCuentasResumen = ({ anio }) => {
       .eq('buque_id', selectedBuque)
       .eq('anio', anio);
 
-    // 2. Leer solicitudes de compra y asistencias (para cruzar)
+    // 2. Leer solicitudes de compra y asistencias
     const { data: compras } = await supabase
       .from('solicitudes_compra')
       .select('numero_pedido, buque_id, numero_cuenta');
@@ -77,7 +101,7 @@ const EstadoCuentasResumen = ({ anio }) => {
       .select('*')
       .eq('estado', 'aceptada');
 
-    // --- Leer presupuestos fijos pedidos y asistencias, y normaliza ---
+    // --- Leer presupuestos fijos pedidos y asistencias ---
     const { data: fijosPedidosRaw } = await supabase
       .from('presupuestos_fijos_pedidos')
       .select('*')
@@ -90,17 +114,14 @@ const EstadoCuentasResumen = ({ anio }) => {
       .eq('buque_id', selectedBuque)
       .eq('anio', anio);
 
-    // Normaliza para que siempre existan los 12 meses
     const fijosPedidos = (fijosPedidosRaw || []).map(normalizaMeses);
     const fijosAsistencias = (fijosAsistenciasRaw || []).map(normalizaMeses);
 
-    // --- Cuentas posibles (como antes) ---
     const cuentas = [...new Set((presupuestos || []).map(p => p.cuenta))];
     const mesNum = meses.findIndex(m => m === selectedMes) + 1;
     const mesDB = mesesDB[mesNum - 1];
 
     const resumenCuentas = cuentas.map(cuenta => {
-      // Presupuesto mes actual
       const presMes = (presupuestos || [])
         .filter(p =>
           p.cuenta === cuenta &&
@@ -112,7 +133,6 @@ const EstadoCuentasResumen = ({ anio }) => {
         )
         .reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
 
-      // ---- Gasto real del mes (compras) ----
       const gastoCompras = (cotizaciones || [])
         .map(cot => {
           const solicitud = (compras || []).find(s => s.numero_pedido === cot.numero_pedido);
@@ -132,7 +152,6 @@ const EstadoCuentasResumen = ({ anio }) => {
         })
         .reduce((a, b) => a + b, 0);
 
-      // ---- Gasto real del mes (asistencias) ----
       const gastoAsistencias = (cotizacionesAsis || [])
         .map(cot => {
           const asistencia = (asistencias || []).find(s => s.numero_ate === cot.numero_asistencia);
@@ -152,45 +171,40 @@ const EstadoCuentasResumen = ({ anio }) => {
         })
         .reduce((a, b) => a + b, 0);
 
-      // ---- Gasto FIJO presupuestado para el mes ----
       const gastoFijo =
         (
           (fijosPedidos?.filter(f =>
             f.cuenta === cuenta &&
-            f.tipo === "Fijo" &&           // <--- CAMBIO AQUI
+            f.tipo === "Fijo" &&
             Number(f[mesDB]) > 0
           ).reduce((a, b) => a + (parseFloat(b[mesDB]) || 0), 0) || 0)
           +
           (fijosAsistencias?.filter(f =>
             f.cuenta === cuenta &&
-            f.tipo === "Fijo" &&           // <--- CAMBIO AQUI
+            f.tipo === "Fijo" &&
             Number(f[mesDB]) > 0
           ).reduce((a, b) => a + (parseFloat(b[mesDB]) || 0), 0) || 0)
         );
 
-      // ---- Planificados ----
       const planificadosPedidos = fijosPedidos?.filter(f =>
         f.cuenta === cuenta &&
-        f.tipo === "Planificado" &&       // <--- CAMBIO AQUI
+        f.tipo === "Planificado" &&
         Number(f[mesDB]) > 0
       ) || [];
 
       const planificadosAsistencias = fijosAsistencias?.filter(f =>
         f.cuenta === cuenta &&
-        f.tipo === "Planificado" &&       // <--- CAMBIO AQUI
+        f.tipo === "Planificado" &&
         Number(f[mesDB]) > 0
       ) || [];
 
-      // ---- TOTAL GASTO MES ----
       const gastoMes = gastoCompras + gastoAsistencias + gastoFijo;
 
-      // Acumulado manual
       const acumuladoAnt =
         cuenta in acumuladosManual
           ? parseFloat(acumuladosManual[cuenta]) || 0
           : 0;
 
-      // Balance
       const balance = acumuladoAnt + presMes - gastoMes;
 
       return {
@@ -205,9 +219,17 @@ const EstadoCuentasResumen = ({ anio }) => {
       };
     });
 
+    // Ordenar según ORDEN_CUENTAS
+    resumenCuentas.sort((a, b) => {
+      const ia = ORDEN_CUENTAS.indexOf(a.cuenta);
+      const ib = ORDEN_CUENTAS.indexOf(b.cuenta);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+
     setResumen(resumenCuentas);
     setLoading(false);
   };
+
 
   // Control edición acumulado
   const handleEdit = (idx, valorActual) => {
