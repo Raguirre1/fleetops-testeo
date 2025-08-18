@@ -43,10 +43,10 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
   const [busqueda, setBusqueda] = useState("");
   const [gastosFijos, setGastosFijos] = useState([]);
   const [gastosPlanificados, setGastosPlanificados] = useState([]);
-  const [restarFijosVisual, setRestarFijosVisual] = useState(false); // 👈 ajuste visual
+  const [restarFijosVisual, setRestarFijosVisual] = useState(false); // ajuste visual
   const toast = useToast();
 
-  // --- Cargar gastos pedidos y asistencias ---
+  // --- Cargar gastos pedidos y asistencias (ejecutado) ---
   const cargarGastos = async () => {
     setLoading(true);
 
@@ -129,7 +129,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     setLoading(false);
   };
 
-  // --- Cargar gastos fijos y planificados ---
+  // --- Cargar fijos y planificados (informativos) ---
   const cargarPresupuestoFijo = async () => {
     const mesStr = mesesDB[mesNum - 1];
 
@@ -163,7 +163,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     // eslint-disable-next-line
   }, [buque, cuenta, mesNum, anio]);
 
-  // --- Exportar a Excel ---
+  // --- Exportar a Excel (solo ejecutado) ---
   const exportarExcel = () => {
     const datos = gastosFiltrados.map((g) => ({
       Tipo: g.tipo,
@@ -193,7 +193,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     }
   };
 
-  // --- Cambiar cuenta ---
+  // --- Cambiar cuenta contable (persistente en solicitudes) ---
   const handleCuentaChange = async (referencia, tipo, nuevaCuenta) => {
     setGastos((prev) =>
       prev.map((item) =>
@@ -231,7 +231,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     }
   };
 
-  // --- Filtros ---
+  // --- Filtros y orden ---
   const gastosFiltrados = gastos.filter((g) =>
     (g.proveedor || "").toLowerCase().includes(busqueda.toLowerCase()) ||
     (g.referencia || "").toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -250,8 +250,9 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
   });
 
   // --- Totales ---
-  const sumaGastos = gastosOrdenados.reduce((a, b) => a + (Number(b.valor) || 0), 0);
-  const sumaFijos = gastosFijos.reduce((a, b) => a + (Number(b.valor) || 0), 0);
+  const sumaGastos = gastosOrdenados.reduce((a, b) => a + (Number(b.valor) || 0), 0); // ejecutado
+  const sumaFijos = gastosFijos.reduce((a, b) => a + (Number(b.valor) || 0), 0);      // informativo
+  const sumaPlanificados = gastosPlanificados.reduce((a, b) => a + (Number(b.valor) || 0), 0); // informativo
   const totalVisual = restarFijosVisual ? (sumaGastos - sumaFijos) : sumaGastos;
 
   return (
@@ -331,7 +332,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                   <>
                     <Tr>
                       <Td colSpan={4} fontWeight="bold" textAlign="right">
-                        Total {restarFijosVisual ? " — fijos restados" : " — sin fijos ni planificados"}
+                        Total {restarFijosVisual ? " — fijos restados (visual)" : " — sin fijos ni planificados"}
                       </Td>
                       <Td isNumeric fontWeight="bold">
                         {totalVisual.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
@@ -340,8 +341,9 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                     </Tr>
                     <Tr>
                       <Td colSpan={7} fontSize="sm" color="gray.600">
-                        Planificado: {sumaGastos.toLocaleString("es-ES", { style: "currency", currency: "EUR" })} ·{" "}
-                        Fijos : {sumaFijos.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                        Ejecutado : {sumaGastos.toLocaleString("es-ES", { style: "currency", currency: "EUR" })} ·{" "}
+                        Fijos : {sumaFijos.toLocaleString("es-ES", { style: "currency", currency: "EUR" })} ·{" "}
+                        Planificados : {sumaPlanificados.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
                         {restarFijosVisual && " · Ajuste aplicado: – Fijos"}
                       </Td>
                     </Tr>
@@ -351,7 +353,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
             </Table>
           </Box>
 
-          {/* Nota Fijos */}
+          {/* Nota Fijos (amarillo pastel) con botón de ajuste visual */}
           {gastosFijos.length > 0 && (
             <Alert status="warning" mt={6} borderRadius="md" variant="subtle" bg="yellow.50">
               <AlertIcon />
@@ -365,7 +367,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                     </Box>
                   ))}
                   <Box fontStyle="italic" mt={2} color="gray.600">
-                    (Solo informativo; puedes restarlos del total de forma visual. Provisionar en caso de no ejecutarse)
+                    (Solo informativo; puedes restarlos del total de forma visual. Provisionar en caso de no ejecutar)
                   </Box>
                 </AlertDescription>
               </Box>
@@ -381,7 +383,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
             </Alert>
           )}
 
-          {/* Nota Planificados */}
+          {/* Nota Planificados (azul/info) */}
           {gastosPlanificados.length > 0 && (
             <Alert status="info" mt={6} borderRadius="md" variant="left-accent">
               <AlertIcon />
