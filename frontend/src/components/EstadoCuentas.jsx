@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box, Table, Thead, Tbody, Tr, Th, Td, Heading, Spinner, Text, Select,
-  IconButton, Input, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
+  Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
-import { EditIcon, CheckIcon, ExternalLinkIcon, InfoOutlineIcon } from '@chakra-ui/icons';
+import { ExternalLinkIcon, InfoOutlineIcon } from '@chakra-ui/icons';
 import { supabase } from '../supabaseClient';
 import { useFlota } from './FlotaContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,11 +38,6 @@ const EstadoCuentasResumen = ({ anio }) => {
   const [selectedMes, setSelectedMes] = useState('');
   const [resumen, setResumen] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  // Edición acumulado manual
-  const [editIdx, setEditIdx] = useState(null);
-  const [editValor, setEditValor] = useState('');
-  const [acumuladosManual, setAcumuladosManual] = useState({}); // { cuenta: valor }
 
   // Detalle modal
   const [detalleCuenta, setDetalleCuenta] = useState('');
@@ -180,18 +175,11 @@ const EstadoCuentasResumen = ({ anio }) => {
       // 🎯 Gasto del mes (solo real): compras + asistencias
       const gastoMes = gastoCompras + gastoAsistencias;
 
-      // Acumulado manual (si lo usas para correcciones)
-      const acumuladoAnt =
-        cuenta in acumuladosManual
-          ? parseFloat(acumuladosManual[cuenta]) || 0
-          : 0;
-
-      // Balance = acumuladoAnt + presupuesto del mes - gasto real del mes
-      const balance = acumuladoAnt + presMes - gastoMes;
+      // Balance sin acumulado: presupuesto del mes - gasto del mes
+      const balance = presMes - gastoMes;
 
       return {
         cuenta,
-        acumuladoAnt,
         presMes,
         gastoMes,
         gastoFijo, // informativo
@@ -212,19 +200,6 @@ const EstadoCuentasResumen = ({ anio }) => {
     setLoading(false);
   };
 
-  // Control edición acumulado
-  const handleEdit = (idx, valorActual) => {
-    setEditIdx(idx);
-    setEditValor(valorActual.toFixed(2));
-  };
-  const handleSave = cuenta => {
-    setAcumuladosManual(prev => ({
-      ...prev,
-      [cuenta]: editValor
-    }));
-    setEditIdx(null);
-  };
-
   // Modal detalle
   const abrirDetalle = (cuenta) => {
     setDetalleCuenta(cuenta);
@@ -240,7 +215,7 @@ const EstadoCuentasResumen = ({ anio }) => {
   return (
     <Box p={4} bg="white" boxShadow="md" borderRadius="md">
       <Heading size="md" mb={4}>
-        Estado de Cuenta Resumido
+        Estado de Cuenta del mes
       </Heading>
       <Box mb={4} display="flex" gap={4}>
         <Select
@@ -277,7 +252,6 @@ const EstadoCuentasResumen = ({ anio }) => {
             <Thead>
               <Tr>
                 <Th>Cuenta</Th>
-                <Th>Acumulado meses anteriores</Th>
                 <Th>Presupuesto {selectedMes}</Th>
                 <Th>Gasto {selectedMes}</Th>
                 <Th>Balance</Th>
@@ -287,39 +261,6 @@ const EstadoCuentasResumen = ({ anio }) => {
               {resumen.map((fila, idx) => (
                 <Tr key={idx}>
                   <Td>{fila.cuenta}</Td>
-
-                  <Td>
-                    {editIdx === idx ? (
-                      <>
-                        <Input
-                          size="sm"
-                          type="number"
-                          value={editValor}
-                          onChange={e => setEditValor(e.target.value)}
-                          width="100px"
-                          mr={2}
-                        />
-                        <IconButton
-                          size="sm"
-                          aria-label="Guardar"
-                          icon={<CheckIcon />}
-                          onClick={() => handleSave(fila.cuenta)}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        {fila.acumuladoAnt.toLocaleString('es-ES', {style: 'currency', currency: 'EUR'})}
-                        <IconButton
-                          size="xs"
-                          ml={2}
-                          aria-label="Editar"
-                          icon={<EditIcon />}
-                          onClick={() => handleEdit(idx, fila.acumuladoAnt)}
-                          variant="ghost"
-                        />
-                      </>
-                    )}
-                  </Td>
 
                   <Td>{fila.presMes.toLocaleString('es-ES', {style: 'currency', currency: 'EUR'})}</Td>
 
