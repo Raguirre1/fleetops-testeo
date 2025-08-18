@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Table, Thead, Tbody, Tr, Th, Td, Heading, Spinner, Text, Select, IconButton, Input, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
+  Box, Table, Thead, Tbody, Tr, Th, Td, Heading, Spinner, Text, Select,
+  IconButton, Input, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody
 } from '@chakra-ui/react';
 import { EditIcon, CheckIcon, ExternalLinkIcon, InfoOutlineIcon } from '@chakra-ui/icons';
 import { supabase } from '../supabaseClient';
@@ -17,20 +18,13 @@ const mesesDB = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
 ];
+
 const ORDEN_CUENTAS = [
-  "Casco",
-  "Máquinas",
-  "Electricidad",
-  "Electrónicas",
-  "SEP",
-  "Fonda",
-  "MLC",
-  "Aceite",
-  "Inversiones",
+  "Casco", "Máquinas", "Electricidad", "Electrónicas",
+  "SEP", "Fonda", "MLC", "Aceite", "Inversiones",
 ];
 
-
-// Para evitar errores de meses faltantes:
+// Normaliza posibles null/undefined en columnas de meses
 const normalizaMeses = (obj) => {
   mesesDB.forEach(mes => {
     if (obj[mes] === undefined || obj[mes] === null) obj[mes] = 0;
@@ -62,26 +56,14 @@ const EstadoCuentasResumen = ({ anio }) => {
   const cargarResumen = async () => {
     setLoading(true);
 
-    const ORDEN_CUENTAS = [
-      "Casco",
-      "Máquinas",
-      "Electricidad",
-      "Electrónicas",
-      "SEP",
-      "Fonda",
-      "MLC",
-      "Aceite",
-      "Inversiones",
-    ];
-
-    // 1. Leer presupuesto mensual (NO SE USA PARA FIJOS/PLANIFICADOS)
+    // 1) Presupuesto mensual (para columna presupuesto del mes)
     const { data: presupuestos } = await supabase
       .from('presupuesto_mensual')
       .select('*')
       .eq('buque_id', selectedBuque)
       .eq('anio', anio);
 
-    // 2. Leer solicitudes de compra y asistencias
+    // 2) Solicitudes (para relacionar cuentas)
     const { data: compras } = await supabase
       .from('solicitudes_compra')
       .select('numero_pedido, buque_id, numero_cuenta');
@@ -90,7 +72,7 @@ const EstadoCuentasResumen = ({ anio }) => {
       .from('solicitudes_asistencia')
       .select('numero_ate, buque_id, numero_cuenta');
 
-    // 3. Leer cotizaciones aceptadas
+    // 3) Cotizaciones aceptadas (gasto real)
     const { data: cotizaciones } = await supabase
       .from('cotizaciones_proveedor')
       .select('*')
@@ -101,7 +83,7 @@ const EstadoCuentasResumen = ({ anio }) => {
       .select('*')
       .eq('estado', 'aceptada');
 
-    // --- Leer presupuestos fijos pedidos y asistencias ---
+    // 4) Presupuestos fijos/planificados
     const { data: fijosPedidosRaw } = await supabase
       .from('presupuestos_fijos_pedidos')
       .select('*')
@@ -117,11 +99,13 @@ const EstadoCuentasResumen = ({ anio }) => {
     const fijosPedidos = (fijosPedidosRaw || []).map(normalizaMeses);
     const fijosAsistencias = (fijosAsistenciasRaw || []).map(normalizaMeses);
 
+    // Cuentas presentes en presupuesto
     const cuentas = [...new Set((presupuestos || []).map(p => p.cuenta))];
     const mesNum = meses.findIndex(m => m === selectedMes) + 1;
     const mesDB = mesesDB[mesNum - 1];
 
     const resumenCuentas = cuentas.map(cuenta => {
+      // Presupuesto del mes (suma de filas que coincidan en cuenta y mes)
       const presMes = (presupuestos || [])
         .filter(p =>
           p.cuenta === cuenta &&
@@ -133,6 +117,7 @@ const EstadoCuentasResumen = ({ anio }) => {
         )
         .reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
 
+      // Gasto real (compras + asistencias) del mes
       const gastoCompras = (cotizaciones || [])
         .map(cot => {
           const solicitud = (compras || []).find(s => s.numero_pedido === cot.numero_pedido);
@@ -171,40 +156,37 @@ const EstadoCuentasResumen = ({ anio }) => {
         })
         .reduce((a, b) => a + b, 0);
 
+      // Fijos informativos del mes (no suman a gastoMes)
       const gastoFijo =
         (
           (fijosPedidos?.filter(f =>
-            f.cuenta === cuenta &&
-            f.tipo === "Fijo" &&
-            Number(f[mesDB]) > 0
+            f.cuenta === cuenta && f.tipo === "Fijo" && Number(f[mesDB]) > 0
           ).reduce((a, b) => a + (parseFloat(b[mesDB]) || 0), 0) || 0)
           +
           (fijosAsistencias?.filter(f =>
-            f.cuenta === cuenta &&
-            f.tipo === "Fijo" &&
-            Number(f[mesDB]) > 0
+            f.cuenta === cuenta && f.tipo === "Fijo" && Number(f[mesDB]) > 0
           ).reduce((a, b) => a + (parseFloat(b[mesDB]) || 0), 0) || 0)
         );
 
+      // Planificados informativos del mes (no suman a gastoMes)
       const planificadosPedidos = fijosPedidos?.filter(f =>
-        f.cuenta === cuenta &&
-        f.tipo === "Planificado" &&
-        Number(f[mesDB]) > 0
+        f.cuenta === cuenta && f.tipo === "Planificado" && Number(f[mesDB]) > 0
       ) || [];
 
       const planificadosAsistencias = fijosAsistencias?.filter(f =>
-        f.cuenta === cuenta &&
-        f.tipo === "Planificado" &&
-        Number(f[mesDB]) > 0
+        f.cuenta === cuenta && f.tipo === "Planificado" && Number(f[mesDB]) > 0
       ) || [];
 
-      const gastoMes = gastoCompras + gastoAsistencias + gastoFijo;
+      // 🎯 Gasto del mes (solo real): compras + asistencias
+      const gastoMes = gastoCompras + gastoAsistencias;
 
+      // Acumulado manual (si lo usas para correcciones)
       const acumuladoAnt =
         cuenta in acumuladosManual
           ? parseFloat(acumuladosManual[cuenta]) || 0
           : 0;
 
+      // Balance = acumuladoAnt + presupuesto del mes - gasto real del mes
       const balance = acumuladoAnt + presMes - gastoMes;
 
       return {
@@ -212,14 +194,14 @@ const EstadoCuentasResumen = ({ anio }) => {
         acumuladoAnt,
         presMes,
         gastoMes,
-        gastoFijo,
-        planificadosPedidos,
-        planificadosAsistencias,
+        gastoFijo, // informativo
+        planificadosPedidos, // informativo
+        planificadosAsistencias, // informativo
         balance,
       };
     });
 
-    // Ordenar según ORDEN_CUENTAS
+    // Ordenar por ORDEN_CUENTAS
     resumenCuentas.sort((a, b) => {
       const ia = ORDEN_CUENTAS.indexOf(a.cuenta);
       const ib = ORDEN_CUENTAS.indexOf(b.cuenta);
@@ -229,7 +211,6 @@ const EstadoCuentasResumen = ({ anio }) => {
     setResumen(resumenCuentas);
     setLoading(false);
   };
-
 
   // Control edición acumulado
   const handleEdit = (idx, valorActual) => {
@@ -244,16 +225,15 @@ const EstadoCuentasResumen = ({ anio }) => {
     setEditIdx(null);
   };
 
-  // Abrir detalle modal
+  // Modal detalle
   const abrirDetalle = (cuenta) => {
     setDetalleCuenta(cuenta);
     setModalOpen(true);
   };
-
   const cerrarDetalle = () => {
     setModalOpen(false);
     setTimeout(() => {
-      cargarResumen(); // Refresca el resumen tras cerrar el modal
+      cargarResumen(); // refresco tras cerrar
     }, 250);
   };
 
@@ -281,11 +261,12 @@ const EstadoCuentasResumen = ({ anio }) => {
           onChange={e => setSelectedMes(e.target.value)}
           width="auto"
         >
-          {meses.map((mes, idx) => (
+          {meses.map((mes) => (
             <option key={mes} value={mes}>{mes}</option>
           ))}
         </Select>
       </Box>
+
       {loading ? (
         <Spinner />
       ) : resumen.length === 0 ? (
@@ -306,6 +287,7 @@ const EstadoCuentasResumen = ({ anio }) => {
               {resumen.map((fila, idx) => (
                 <Tr key={idx}>
                   <Td>{fila.cuenta}</Td>
+
                   <Td>
                     {editIdx === idx ? (
                       <>
@@ -338,8 +320,11 @@ const EstadoCuentasResumen = ({ anio }) => {
                       </>
                     )}
                   </Td>
+
                   <Td>{fila.presMes.toLocaleString('es-ES', {style: 'currency', currency: 'EUR'})}</Td>
+
                   <Td>
+                    {/* Valor clicable para abrir detalle */}
                     <Box
                       as={motion.div}
                       whileHover={{ scale: 1.05, backgroundColor: "#e3f2fd" }}
@@ -361,31 +346,58 @@ const EstadoCuentasResumen = ({ anio }) => {
                       </span>
                       <ExternalLinkIcon ml={2} color="gray.500" />
                     </Box>
-                    {/* Desglose: Fijo y Planificado */}
+
+                    {/* Nota informativa: Fijos (amarillo pastel) */}
                     {fila.gastoFijo > 0 && (
-                      <Box fontSize="xs" color="blue.700" pl={1}>
-                        +{fila.gastoFijo.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} fijo
+                      <Box
+                        mt={1}
+                        fontSize="xs"
+                        pl={2}
+                        py={0.5}
+                        borderRadius="6px"
+                        bg="yellow.50"
+                        color="yellow.800"
+                        display="inline-flex"
+                        alignItems="center"
+                        gap={1}
+                      >
+                        <InfoOutlineIcon />
+                        Fijos :&nbsp;
+                        <b>{fila.gastoFijo.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</b>
                       </Box>
                     )}
+
+                    {/* Nota informativa: Planificados (azul/info) */}
                     {(fila.planificadosPedidos.length > 0 || fila.planificadosAsistencias.length > 0) && (() => {
-                      // Variables de mes dentro del render para asegurar scope correcto:
                       const mesNum = meses.findIndex(m => m === selectedMes) + 1;
                       const keyMes = mesesDB[mesNum - 1];
-                      // Suma robusta:
                       const gastoPlanificado = [...fila.planificadosPedidos, ...fila.planificadosAsistencias]
                         .reduce((a, b) => {
                           const valor = (b && b[keyMes] !== undefined && b[keyMes] !== null) ? parseFloat(b[keyMes]) : 0;
                           return a + (isNaN(valor) ? 0 : valor);
                         }, 0);
+                      if (gastoPlanificado <= 0) return null;
                       return (
-                        <Box fontSize="xs" color="orange.700" pl={1} display="flex" alignItems="center">
-                          <InfoOutlineIcon mr={1} />
-                          Gasto planificado:{" "}
-                          {gastoPlanificado.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                        <Box
+                          mt={1}
+                          fontSize="xs"
+                          pl={2}
+                          py={0.5}
+                          borderRadius="6px"
+                          bg="blue.50"
+                          color="blue.800"
+                          display="inline-flex"
+                          alignItems="center"
+                          gap={1}
+                        >
+                          <InfoOutlineIcon />
+                          Planificados :&nbsp;
+                          <b>{gastoPlanificado.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</b>
                         </Box>
                       );
                     })()}
                   </Td>
+
                   <Td
                     style={{
                       color: fila.balance >= 0 ? 'green' : 'red',
