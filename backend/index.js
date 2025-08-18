@@ -11,6 +11,7 @@ const PORT = 5001;
 app.use(cors());
 app.use(express.json());
 
+
 // ===== Autenticación básica =====
 const AUTH_USER = "admin";
 const AUTH_PASS = "fleetops123";

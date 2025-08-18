@@ -43,6 +43,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
   const [busqueda, setBusqueda] = useState("");
   const [gastosFijos, setGastosFijos] = useState([]);
   const [gastosPlanificados, setGastosPlanificados] = useState([]);
+  const [restarFijosVisual, setRestarFijosVisual] = useState(false); // 👈 ajuste visual
   const toast = useToast();
 
   // --- Cargar gastos pedidos y asistencias ---
@@ -74,10 +75,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
 
     // Gastos de pedidos
     pedidos?.forEach((pedido) => {
-      if (
-        pedido.buque_id === buque &&
-        pedido.numero_cuenta === cuenta
-      ) {
+      if (pedido.buque_id === buque && pedido.numero_cuenta === cuenta) {
         cotizaciones?.forEach((cot) => {
           if (
             cot.numero_pedido === pedido.numero_pedido &&
@@ -103,10 +101,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
 
     // Gastos de asistencias
     asistencias?.forEach((asistencia) => {
-      if (
-        asistencia.buque_id === buque &&
-        asistencia.numero_cuenta === cuenta
-      ) {
+      if (asistencia.buque_id === buque && asistencia.numero_cuenta === cuenta) {
         cotizacionesAsist?.forEach((cot) => {
           if (
             cot.numero_asistencia === asistencia.numero_ate &&
@@ -138,7 +133,6 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
   const cargarPresupuestoFijo = async () => {
     const mesStr = mesesDB[mesNum - 1];
 
-    // Traer Fijos y Planificados de ambas tablas usando SOLO campo tipo (nuevo modelo)
     const [{ data: fijosPedidos }, { data: fijosAsistencias }] = await Promise.all([
       supabase.from("presupuestos_fijos_pedidos")
         .select(`id, nombre, cuenta, tipo, ${mesStr}`)
@@ -154,7 +148,6 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
         .or("tipo.eq.Fijo,tipo.eq.Planificado"),
     ]);
 
-    // Unifica resultados y separa por tipo
     const todos = [...(fijosPedidos || []), ...(fijosAsistencias || [])].map(e => ({
       ...e,
       valor: Number(e[mesStr]) || 0
@@ -182,19 +175,6 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
       Fecha: g.fecha ? new Date(g.fecha).toLocaleDateString() : "",
     }));
 
-    // Añadir los fijos como fila extra
-    gastosFijos.forEach((fijo) => {
-      datos.push({
-        Tipo: "Gasto Fijo",
-        Proveedor: "-",
-        "Nº Referencia": "-",
-        Título: fijo.nombre || "",
-        "Valor (€)": fijo.valor,
-        "Cuenta contable": fijo.cuenta || "",
-        Fecha: "-",
-      });
-    });
-
     const ws = XLSX.utils.json_to_sheet(datos);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Gastos");
@@ -203,7 +183,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     saveAs(blob, `Gastos_${buqueNombre || buque}_${cuenta}_${mesNum}-${anio}.xlsx`);
   };
 
-  // --- Cambiar orden ---
+  // --- Orden ---
   const cambiarOrden = (campo) => {
     if (ordenCampo === campo) {
       setOrdenDireccion(ordenDireccion === "asc" ? "desc" : "asc");
@@ -213,7 +193,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     }
   };
 
-  // --- Cambiar cuenta contable ---
+  // --- Cambiar cuenta ---
   const handleCuentaChange = async (referencia, tipo, nuevaCuenta) => {
     setGastos((prev) =>
       prev.map((item) =>
@@ -251,7 +231,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     }
   };
 
-  // --- Búsqueda y orden ---
+  // --- Filtros ---
   const gastosFiltrados = gastos.filter((g) =>
     (g.proveedor || "").toLowerCase().includes(busqueda.toLowerCase()) ||
     (g.referencia || "").toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -269,9 +249,10 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
       : (valB || "").toString().localeCompare((valA || "").toString());
   });
 
-  // --- Suma total gastos + fijos ---
+  // --- Totales ---
   const sumaGastos = gastosOrdenados.reduce((a, b) => a + (Number(b.valor) || 0), 0);
   const sumaFijos = gastosFijos.reduce((a, b) => a + (Number(b.valor) || 0), 0);
+  const totalVisual = restarFijosVisual ? (sumaGastos - sumaFijos) : sumaGastos;
 
   return (
     <Box p={6}>
@@ -279,7 +260,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
         📋 Detalle de gastos - {buqueNombre || buque} / {cuenta} / {mesesCorto[mesNum-1]}-{anio}
       </Heading>
 
-      <Flex mb={4} gap={3} align="center">
+      <Flex mb={4} gap={3} align="center" wrap="wrap">
         <Button onClick={onBack} colorScheme="blue">Volver al resumen</Button>
         <Button colorScheme="green" onClick={exportarExcel} leftIcon={<DownloadIcon />}>
           Exportar Excel
@@ -345,29 +326,62 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                     <Td>{g.fecha ? new Date(g.fecha).toLocaleDateString() : ""}</Td>
                   </Tr>
                 ))}
-                {gastosFijos.length > 0 && gastosFijos.map((fijo, idx) => (
-                  <Tr key={`fijo-${idx}`} bg="blue.50">
-                    <Td fontWeight="bold" colSpan={3}>Gasto Fijo Presupuestado</Td>
-                    <Td>{fijo.nombre}</Td>
-                    <Td isNumeric fontWeight="bold" color="blue.700">
-                      {Number(fijo.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
-                    </Td>
-                    <Td colSpan={2} />
-                  </Tr>
-                ))}
-                {(gastosOrdenados.length > 0 || gastosFijos.length > 0) && (
-                  <Tr>
-                    <Td colSpan={4} fontWeight="bold" textAlign="right">Total (incluye Gastos Fijos)</Td>
-                    <Td isNumeric fontWeight="bold">
-                      {(sumaGastos + sumaFijos).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
-                    </Td>
-                    <Td colSpan={2} />
-                  </Tr>
+
+                {gastosOrdenados.length > 0 && (
+                  <>
+                    <Tr>
+                      <Td colSpan={4} fontWeight="bold" textAlign="right">
+                        Total {restarFijosVisual ? " — fijos restados" : " — sin fijos ni planificados"}
+                      </Td>
+                      <Td isNumeric fontWeight="bold">
+                        {totalVisual.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                      </Td>
+                      <Td colSpan={2} />
+                    </Tr>
+                    <Tr>
+                      <Td colSpan={7} fontSize="sm" color="gray.600">
+                        Planificado: {sumaGastos.toLocaleString("es-ES", { style: "currency", currency: "EUR" })} ·{" "}
+                        Fijos : {sumaFijos.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                        {restarFijosVisual && " · Ajuste aplicado: – Fijos"}
+                      </Td>
+                    </Tr>
+                  </>
                 )}
               </Tbody>
             </Table>
           </Box>
-          {/* Cuadro de avisos para gastos planificados */}
+
+          {/* Nota Fijos */}
+          {gastosFijos.length > 0 && (
+            <Alert status="warning" mt={6} borderRadius="md" variant="subtle" bg="yellow.50">
+              <AlertIcon />
+              <Box flex="1">
+                <AlertTitle>Gastos Fijos presupuestados para este mes</AlertTitle>
+                <AlertDescription>
+                  {gastosFijos.map((fijo, i) => (
+                    <Box key={i}>
+                      <b>{fijo.nombre}</b>:{" "}
+                      {Number(fijo.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                    </Box>
+                  ))}
+                  <Box fontStyle="italic" mt={2} color="gray.600">
+                    (Solo informativo; puedes restarlos del total de forma visual. Provisionar en caso de no ejecutarse)
+                  </Box>
+                </AlertDescription>
+              </Box>
+              <Button
+                ml={4}
+                size="sm"
+                colorScheme={restarFijosVisual ? "gray" : "yellow"}
+                variant={restarFijosVisual ? "outline" : "solid"}
+                onClick={() => setRestarFijosVisual((v) => !v)}
+              >
+                {restarFijosVisual ? "Deshacer ajuste" : "Restar fijos del total (visual)"}
+              </Button>
+            </Alert>
+          )}
+
+          {/* Nota Planificados */}
           {gastosPlanificados.length > 0 && (
             <Alert status="info" mt={6} borderRadius="md" variant="left-accent">
               <AlertIcon />
@@ -376,12 +390,12 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                 <AlertDescription>
                   {gastosPlanificados.map((plan, i) => (
                     <Box key={i}>
-                      <b>{plan.nombre}</b>:&nbsp;
+                      <b>{plan.nombre}</b>:{" "}
                       {Number(plan.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
                     </Box>
                   ))}
                   <Box fontStyle="italic" mt={2} color="gray.600">
-                    (No restan en los totales hasta que se ejecuten como pedido o asistencia)
+                    (Solo informativo; no se incluyen en los totales hasta que se ejecuten como pedido o asistencia)
                   </Box>
                 </AlertDescription>
               </Box>
