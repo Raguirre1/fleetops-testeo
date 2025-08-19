@@ -184,6 +184,19 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
       return;
     }
 
+        // 🚨 Validación: bloquear si el título contiene "/"
+    const titulo = formulario.tituloAsistencia;
+    if (titulo.includes("/")) {
+      toast({
+        title: "Título inválido",
+        description: "El título del pedido no puede contener el carácter / (barra).",
+        status: "error",
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+
     const datos = {
       numero_ate: numero,
       titulo_ate: formulario.tituloAsistencia,

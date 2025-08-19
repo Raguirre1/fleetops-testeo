@@ -183,6 +183,18 @@ const PurchaseRequest = ({ usuario, onBack }) => {
       });
       return;
     }
+    // 🚨 Validación: bloquear si el título contiene "/"
+    const titulo = formulario.tituloPedido;
+    if (titulo.includes("/")) {
+      toast({
+        title: "Título inválido",
+        description: "El título del pedido no puede contener el carácter / (barra).",
+        status: "error",
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
 
     // Detecta si estamos editando y si se cambia el número de pedido
     const cambioNumero = editarId && formulario.numeroPedido !== editarId;
