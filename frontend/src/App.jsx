@@ -12,7 +12,6 @@ import {
   Flex,
   extendTheme,
   useToast,
-  Spinner,
 } from "@chakra-ui/react";
 import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -27,7 +26,7 @@ import DashboardGeneral from "./components/DashboardGeneral";
 import { FlotaProvider, useFlota } from "./components/FlotaContext";
 import { supabase } from "./supabaseClient";
 import { obtenerNombreDesdeEmail } from "./components/EmailUsuarios";
-import { exportarPedidosBuque, exportarFlotaCompleta } from "./utils/exportarInfoSupabase";
+import Exportar from "./components/Exportar"; // Botón Exportar
 
 const theme = extendTheme({
   styles: {
@@ -41,12 +40,17 @@ const theme = extendTheme({
 });
 
 function MainApp({ usuario, setUsuario }) {
-  const { flotaSeleccionada, setFlotaSeleccionada, buques } = useFlota();
+  const { flotaSeleccionada, setFlotaSeleccionada } = useFlota();
   const navigate = useNavigate();
   const [mostrarDashboard, setMostrarDashboard] = useState(true);
-  const [buqueSeleccionado, setBuqueSeleccionado] = useState("");
-  const [descargando, setDescargando] = useState(false);
   const toast = useToast();
+
+  // ✅ Lista blanca de usuarios autorizados a ver el botón Exportar
+  const ALLOW = new Set([
+    "raguirre@cotenaval.es".toLowerCase(),
+    // "otro@tu-dominio.com".toLowerCase(),
+  ]);
+  const canExport = ALLOW.has((usuario?.email || "").toLowerCase());
 
   const cerrarSesion = async (mensaje = null) => {
     await supabase.auth.signOut();
@@ -83,28 +87,6 @@ function MainApp({ usuario, setUsuario }) {
 
   return (
     <>
-      {/* SPINNER/OVERLAY de descarga */}
-      {descargando && (
-        <Box
-          position="fixed"
-          left={0}
-          top={0}
-          width="100vw"
-          height="100vh"
-          bg="rgba(255,255,255,0.75)"
-          zIndex={9999}
-          display="flex"
-          flexDirection="column"
-          alignItems="center"
-          justifyContent="center"
-        >
-          <Text fontSize="xl" mb={4} fontWeight="bold" color="blue.600">
-            Descargando datos y archivos...
-          </Text>
-          <Spinner size="xl" color="blue.500" thickness="5px" speed="0.6s" />
-        </Box>
-      )}
-
       <Box minH="100vh" bg="gray.50">
         <Flex
           as="header"
@@ -124,60 +106,8 @@ function MainApp({ usuario, setUsuario }) {
               🏠 Ir al Dashboard
             </Button>
 
-            {/* --- SOLO ADMIN: Selector de buque y botones de exportación --- */}
-            {usuario?.email === "raguirre@cotenaval.es" && (
-              <>
-                <Box display="flex" alignItems="center" gap={2}>
-                  <Text fontSize="sm">Exportar pedidos del buque:</Text>
-                  <select
-                    value={buqueSeleccionado}
-                    onChange={e => setBuqueSeleccionado(e.target.value)}
-                    style={{
-                      marginRight: 8,
-                      padding: 4,
-                      borderRadius: 6,
-                      border: "1px solid #b3b3b3",
-                      fontSize: "1em",
-                    }}
-                  >
-                    <option value="">Selecciona buque</option>
-                    {buques && buques.map(b =>
-                      <option key={b.id} value={b.id}>{b.nombre}</option>
-                    )}
-                  </select>
-                  <Button
-                    colorScheme="blue"
-                    onClick={async () => {
-                      setDescargando(true);
-                      try {
-                        await exportarPedidosBuque(buqueSeleccionado);
-                      } finally {
-                        setDescargando(false);
-                      }
-                    }}
-                    isDisabled={!buqueSeleccionado}
-                  >
-                    📦 Exportar pedidos
-                  </Button>
-                </Box>
-                {/* --- Fin selector buque --- */}
-
-                {/* --- Exportar toda la flota --- */}
-                <Button
-                  colorScheme="purple"
-                  onClick={async () => {
-                    setDescargando(true);
-                    try {
-                      await exportarFlotaCompleta(flotaSeleccionada.id);
-                    } finally {
-                      setDescargando(false);
-                    }
-                  }}
-                >
-                  📦 Exportar flota completa
-                </Button>
-              </>
-            )}
+            {/* 🔐 Solo usuarios autorizados ven el botón Exportar */}
+            {canExport && <Exportar usuario={usuario} />}
 
             <Button colorScheme="yellow" onClick={cambiarFlota}>
               Seleccionar Flota
@@ -255,7 +185,6 @@ function App() {
       }
     };
 
-    // Eventos de actividad
     window.addEventListener("mousemove", actualizarActividad);
     window.addEventListener("keydown", actualizarActividad);
     window.addEventListener("scroll", actualizarActividad);
