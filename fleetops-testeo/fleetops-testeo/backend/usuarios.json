@@ -1,0 +1,27 @@
+[
+  {
+    "nombre": "Rafael Aguirre Delgado",
+    "rol": "Jefe de Mantenimiento",
+    "password": "1234"
+  },
+  {
+    "nombre": "Reyes García Vargas",
+    "rol": "Responsable de compras",
+    "password": "1234"
+  },
+  {
+    "nombre": "Aarón Trujillo Alonso",
+    "rol": "Superintendente",
+    "password": "1234"
+  },
+  {
+    "nombre": "Jose Carlos Roger Sánchez",
+    "rol": "Superintendente",
+    "password": "1234"
+  },
+  {
+    "nombre": "Noelia Galafat Díaz",
+    "rol": "Asist. Superintendente",
+    "password": "1234"
+  }
+]

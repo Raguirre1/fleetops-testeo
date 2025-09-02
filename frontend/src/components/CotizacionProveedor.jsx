@@ -27,7 +27,8 @@ const CotizacionProveedor = ({ numeroPedido, buqueId }) => {
         .from("cotizaciones_proveedor")
         .select("numero_pedido, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at, fecha_aceptacion, buque_id")
         .eq("numero_pedido", numeroPedido)
-        .eq("buque_id", buqueId);
+        .eq("buque_id", buqueId)
+        .order("created_at", { ascending: true });
 
       if (error) {
         console.error("Error cargando cotizaciones:", error);
@@ -38,6 +39,17 @@ const CotizacionProveedor = ({ numeroPedido, buqueId }) => {
 
     fetchCotizaciones();
   }, [numeroPedido, buqueId]);
+
+  // 🔹 Nuevo useEffect para guardado automático diferido
+  useEffect(() => {
+    if (cotizaciones.length === 0) return;
+
+    const timeout = setTimeout(() => {
+      cotizaciones.forEach((cot) => autoSave(cot));  // 👈 usa la función autoSave
+    }, 2000); // guarda 2s después del último cambio
+
+    return () => clearTimeout(timeout); // limpia si hay cambios antes de los 2s
+  }, [cotizaciones]);
 
   const handleAddCotizacion = () => {
     if (cotizaciones.length >= 3) return;
@@ -54,6 +66,7 @@ const CotizacionProveedor = ({ numeroPedido, buqueId }) => {
       },
     ]);
   };
+
 
   const handleRemoveCotizacion = async (index) => {
     const cot = cotizaciones[index];
@@ -192,20 +205,9 @@ const CotizacionProveedor = ({ numeroPedido, buqueId }) => {
   };
 
   const handleSave = async () => {
-    const incompletas = cotizaciones.some(
-      (c) => c.estado !== "cancelada" && (!c.proveedor.trim() || !c.path_cotizacion)
-    );
-
-    if (incompletas) {
-      toast({
-        title: "Faltan campos obligatorios o archivo de cotización",
-        status: "error",
-      });
-      return;
-    }
-
     try {
       for (const cot of cotizaciones) {
+        if (!cot.proveedor?.trim()) continue;
         const proveedor = cot.proveedor.trim();
         const valor = parseFloat(cot.valor) || 0;
         const valor_factura =
@@ -218,12 +220,12 @@ const CotizacionProveedor = ({ numeroPedido, buqueId }) => {
             numero_pedido: numeroPedido,
             buque_id: buqueId,
             proveedor,
-            valor: cot.estado === "cancelada" ? 0 : valor,
-            estado: cot.estado,
-            path_cotizacion: cot.estado === "cancelada" ? null : cot.path_cotizacion,
-            path_invoice: cot.estado === "cancelada" ? null : cot.path_invoice,
-            valor_factura: cot.estado === "cancelada" ? null : valor_factura,
-            fecha_aceptacion: cot.estado === "cancelada" ? null : cot.fecha_aceptacion,
+            valor, // ✅ mantenemos el valor aunque esté cancelada
+            estado: cot.estado || "pendiente",
+            path_cotizacion: cot.path_cotizacion || null, // ✅ mantenemos cotización
+            path_invoice: cot.path_invoice || null,       // ✅ mantenemos factura
+            valor_factura,
+            fecha_aceptacion: cot.fecha_aceptacion || null,
           },
           { onConflict: ["numero_pedido", "proveedor", "buque_id"] }
         );
@@ -233,6 +235,36 @@ const CotizacionProveedor = ({ numeroPedido, buqueId }) => {
     } catch (err) {
       console.error("Error al guardar cotización:", err);
       toast({ title: "Error al guardar en Supabase", status: "error" });
+    }
+  };
+
+  const autoSave = async (cot) => {
+    if (!cot.proveedor?.trim()) return; // no guardar si no hay proveedor
+
+    const proveedor = cot.proveedor.trim();
+    const valor = parseFloat(cot.valor) || 0;
+    const valor_factura =
+      cot.valor_factura === "" || cot.valor_factura == null
+        ? null
+        : parseFloat(cot.valor_factura);
+
+    const { error } = await supabase.from("cotizaciones_proveedor").upsert(
+      {
+        numero_pedido: numeroPedido,
+        buque_id: buqueId,
+        proveedor,
+        valor, // ✅ no se borra si está cancelada
+        estado: cot.estado || "pendiente",
+        path_cotizacion: cot.path_cotizacion || null,
+        path_invoice: cot.path_invoice || null,
+        valor_factura,
+        fecha_aceptacion: cot.fecha_aceptacion || null,
+      },
+      { onConflict: ["numero_pedido", "proveedor", "buque_id"] }
+    );
+
+    if (error) {
+      console.error("Error en autosave:", error.message);
     }
   };
 
