@@ -3,6 +3,7 @@ import { Box, Button, Heading, HStack, Text } from "@chakra-ui/react";
 import Provisiones from "./Provisiones";
 import Presupuesto from "./Presupuesto";
 import EstadoCuentas from "./EstadoCuentas";
+import InformeCuentas from "./InformeCuentas";  // 👈 nuevo import
 
 const Controlling = () => {
   const [seccion, setSeccion] = useState("");
@@ -16,7 +17,7 @@ const Controlling = () => {
       case "estadoCuentas":
         return <EstadoCuentas anio={new Date().getFullYear()} />;
       case "informes":
-        return <Text fontSize="lg">📑 Sección de Informes de Cuentas (en desarrollo)</Text>;
+        return <InformeCuentas />;   // 👈 renderizar el informe real
       case "kpis":
         return <Text fontSize="lg">📈 Sección de KPIs (en desarrollo)</Text>;
       default:

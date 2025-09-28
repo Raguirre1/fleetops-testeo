@@ -606,6 +606,25 @@ const AsistenciaRequest = ({ usuario, onBack }) => {
                       <Button size="xs" onClick={() => archivarAsistencia(s.numero_ate)}>📦</Button>
                     </Tooltip>
                     <Menu>
+                    <Tooltip
+                      label={s.sobrevenido ? "Desmarcar como sobrevenido" : "Marcar como sobrevenido"}
+                      hasArrow
+                    >
+                      <Button
+                        size="xs"
+                        colorScheme={s.sobrevenido ? "yellow" : "gray"}
+                        onClick={async () => {
+                          await supabase
+                            .from("solicitudes_asistencia")
+                            .update({ sobrevenido: !s.sobrevenido })
+                            .eq("numero_ate", s.numero_ate);
+                          await cargarSolicitudes();
+                        }}
+                      >
+                        🚨
+                      </Button>
+                    </Tooltip>
+
                       <Tooltip label="Cambiar estado" hasArrow>
                         <MenuButton as={IconButton} size="xs" icon={<FaCog />} />
                       </Tooltip>

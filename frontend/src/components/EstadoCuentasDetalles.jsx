@@ -53,7 +53,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     // Pedidos
     const { data: pedidos } = await supabase
       .from("solicitudes_compra")
-      .select("numero_pedido, buque_id, numero_cuenta, titulo_pedido");
+      .select("numero_pedido, buque_id, numero_cuenta, titulo_pedido, sobrevenido");
 
     const { data: cotizaciones } = await supabase
       .from("cotizaciones_proveedor")
@@ -63,7 +63,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
     // Asistencias
     const { data: asistencias } = await supabase
       .from("solicitudes_asistencia")
-      .select("numero_ate, buque_id, numero_cuenta, titulo_ate");
+      .select("numero_ate, buque_id, numero_cuenta, titulo_ate, sobrevenido");
 
     const { data: cotizacionesAsist } = await supabase
       .from("asistencias_proveedor")
@@ -92,6 +92,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                 cuenta: pedido.numero_cuenta || "",
                 valor: Number(cot.valor) || 0,
                 fecha: cot.fecha_aceptacion,
+                sobrevenido: pedido.sobrevenido || false
               });
             }
           }
@@ -118,6 +119,7 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                 cuenta: asistencia.numero_cuenta || "",
                 valor: Number(cot.valor) || 0,
                 fecha: cot.fecha_aceptacion,
+                sobrevenido: asistencia.sobrevenido || false
               });
             }
           }
@@ -310,7 +312,9 @@ const EstadoCuentasDetalles = ({ buque, buqueNombre, cuenta, mesNum, anio, onBac
                   <Tr key={`${g.referencia}-${index}`}>
                     <Td>{g.tipo}</Td>
                     <Td>{g.proveedor}</Td>
-                    <Td>{g.referencia}</Td>
+                    <Td>
+                      {g.referencia} {g.sobrevenido && <span title="Sobrevenido">🚨</span>}
+                    </Td>
                     <Td>{g.titulo}</Td>
                     <Td isNumeric>{Number(g.valor).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</Td>
                     <Td>

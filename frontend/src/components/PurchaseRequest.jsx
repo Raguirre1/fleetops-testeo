@@ -36,6 +36,7 @@ import PedidosArchivados from "./PedidosArchivados";
 import { useFlota } from "./FlotaContext";
 import { obtenerNombreDesdeEmail } from "./EmailUsuarios";
 
+
 // --------- FUNCION RECURSIVA PARA LISTAR TODOS LOS ARCHIVOS DEL BUCKET (incl. subcarpetas) ---------
 const listarArchivosRecursivo = async (bucket, carpeta) => {
   let archivos = [];
@@ -770,6 +771,27 @@ const PurchaseRequest = ({ usuario, onBack }) => {
                     <Tooltip label="Archivar pedido" hasArrow>
                       <Button size="xs" onClick={() => archivarPedido(s.numero_pedido)}>📦</Button>
                     </Tooltip>
+
+                    {/* 🚨 NUEVO: Sirena para marcar sobrevenido */}
+                    <Tooltip
+                      label={s.sobrevenido ? "Desmarcar como sobrevenido" : "Marcar como sobrevenido"}
+                      hasArrow
+                    >
+                      <Button
+                        size="xs"
+                        colorScheme={s.sobrevenido ? "yellow" : "gray"}
+                        onClick={async () => {
+                          await supabase
+                            .from("solicitudes_compra")
+                            .update({ sobrevenido: !s.sobrevenido })
+                            .eq("numero_pedido", s.numero_pedido);
+                          await cargarSolicitudes();
+                        }}
+                      >
+                        🚨
+                      </Button>
+                    </Tooltip>
+
                     <Menu>
                       <Tooltip label="Cambiar estado" hasArrow>
                         <MenuButton as={IconButton} size="xs" icon={<FaCog />} />

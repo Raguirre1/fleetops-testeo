@@ -29,7 +29,8 @@ const AsistenciaProveedor = ({ numeroAsistencia, buqueId }) => {
           "numero_asistencia, proveedor, valor, valor_factura, estado, path_cotizacion, path_invoice, created_at, fecha_aceptacion, buque_id"
         )
         .eq("numero_asistencia", numeroAsistencia)
-        .eq("buque_id", buqueId);
+        .eq("buque_id", buqueId)
+        .order("created_at", { ascending: true });
 
       if (error) {
         console.error("Error cargando cotizaciones:", error);
@@ -39,7 +40,19 @@ const AsistenciaProveedor = ({ numeroAsistencia, buqueId }) => {
     };
 
     fetchCotizaciones();
-  }, [numeroAsistencia, buqueId]);
+  }, [numeroAsistencia, buqueId]);  // 👈 este queda igual
+
+  // 🔹 Nuevo useEffect para guardado automático diferido
+  useEffect(() => {
+    if (cotizaciones.length === 0) return;
+
+    const timeout = setTimeout(() => {
+      cotizaciones.forEach((cot) => autoSave(cot)); // 👈 llamamos a la función autoSave
+    }, 2000);
+
+    return () => clearTimeout(timeout); // limpiamos si hay cambios antes de 2s
+  }, [cotizaciones]); // 👈 vigila cambios en cotizaciones
+
 
   const handleAddCotizacion = () => {
     if (cotizaciones.length >= 3) return;
@@ -190,38 +203,21 @@ const AsistenciaProveedor = ({ numeroAsistencia, buqueId }) => {
   };
 
   const handleSave = async () => {
-    const incompletas = cotizaciones.some((c) => !c.proveedor?.trim());
-
-    if (incompletas) {
-      toast({
-        title: "Debes rellenar el nombre del proveedor",
-        status: "error",
-      });
-      return;
-    }
-
-    const sinPdf = cotizaciones.some((c) => !c.path_cotizacion);
-
-    if (sinPdf) {
-      toast({
-        title: "Advertencia",
-        description: "Se guardarán cotizaciones sin PDF adjunto. Añade un archivo si está disponible.",
-        status: "warning",
-        duration: 5000,
-      });
-    }
-
     try {
       for (const cot of cotizaciones) {
+        if (!cot.proveedor?.trim()) continue;
+
         const dataToSend = {
           numero_asistencia: numeroAsistencia,
           proveedor: cot.proveedor.trim(),
           buque_id: buqueId,
-          valor: isNaN(parseFloat(cot.valor)) ? 0 : parseFloat(cot.valor),
+          valor: isNaN(parseFloat(cot.valor)) ? 0 : parseFloat(cot.valor), // ✅ se mantiene aunque esté cancelada
           estado: cot.estado || "pendiente",
-          path_cotizacion: cot.path_cotizacion || null,
+          path_cotizacion: cot.path_cotizacion || null, // ✅ no se borra aunque esté cancelada
           path_invoice: cot.path_invoice || null,
-          valor_factura: isNaN(parseFloat(cot.valor_factura)) ? 0 : parseFloat(cot.valor_factura),
+          valor_factura: isNaN(parseFloat(cot.valor_factura))
+            ? 0
+            : parseFloat(cot.valor_factura),
           fecha_aceptacion: cot.fecha_aceptacion || null,
         };
 
@@ -248,6 +244,35 @@ const AsistenciaProveedor = ({ numeroAsistencia, buqueId }) => {
       toast({ title: "Error inesperado", status: "error" });
     }
   };
+
+  const autoSave = async (cot) => {
+    if (!cot.proveedor?.trim()) return; // no guardar si no hay proveedor
+
+    const dataToSend = {
+      numero_asistencia: numeroAsistencia,
+      proveedor: cot.proveedor.trim(),
+      buque_id: buqueId,
+      valor: isNaN(parseFloat(cot.valor)) ? 0 : parseFloat(cot.valor), // ✅ se mantiene
+      estado: cot.estado || "pendiente",
+      path_cotizacion: cot.path_cotizacion || null,
+      path_invoice: cot.path_invoice || null,
+      valor_factura: isNaN(parseFloat(cot.valor_factura))
+        ? 0
+        : parseFloat(cot.valor_factura),
+      fecha_aceptacion: cot.fecha_aceptacion || null,
+    };
+
+    const { error } = await supabase
+      .from("asistencias_proveedor")
+      .upsert(dataToSend, {
+        onConflict: ["numero_asistencia", "proveedor", "buque_id"],
+      });
+
+    if (error) {
+      console.error("Error en autosave:", error.message);
+    }
+  };
+
 
   return (
     <Box mt={8}>

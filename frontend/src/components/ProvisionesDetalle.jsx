@@ -40,7 +40,7 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
     // Pedidos
     const { data: pedidos } = await supabase
       .from("solicitudes_compra")
-      .select("numero_pedido, buque_id, numero_cuenta")
+      .select("numero_pedido, buque_id, numero_cuenta, sobrevenido")
       .eq("buque_id", buque)
       .in("estado", ["Pedido Activo", "Recibido"]);
 
@@ -51,7 +51,7 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
 
     const { data: asistencias } = await supabase
       .from("solicitudes_asistencia")
-      .select("numero_ate, buque_id, numero_cuenta")
+      .select("numero_ate, buque_id, numero_cuenta, sobrevenido")
       .eq("buque_id", buque)
 
     const { data: cotizacionesAsist } = await supabase
@@ -77,6 +77,7 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
             cuenta: pedido.numero_cuenta || "",
             valor: Number(cot.valor) || 0,
             fecha: cot.fecha_aceptacion || cot.created_at, 
+            sobrevenido: pedido.sobrevenido || false 
           });
         }
       });
@@ -97,6 +98,7 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
             cuenta: asistencia.numero_cuenta || "",
             valor: Number(cot.valor) || 0,
             fecha: cot.fecha_aceptacion || cot.created_at, 
+            sobrevenido: asistencia.sobrevenido || false
           });
         }
       });
@@ -254,7 +256,9 @@ const ProvisionesDetalle = ({ buque, buqueNombre, cuenta, onBack }) => {
                 <Tr key={`${prov.numero_pedido}-${index}`}>
                   <Td>{prov.tipo}</Td>
                   <Td>{prov.proveedor}</Td>
-                  <Td color={getColor(prov.fecha)}>{prov.numero_pedido}</Td>
+                  <Td color={getColor(prov.fecha)}>
+                    {prov.numero_pedido} {prov.sobrevenido && <span title="Sobrevenido">🚨</span>}
+                  </Td>
                   <Td isNumeric>{Number(prov.valor).toLocaleString("es-ES", {
                     style: "currency",
                     currency: "EUR",
