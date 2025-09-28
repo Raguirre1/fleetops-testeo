@@ -1,116 +1,139 @@
-// src/components/ExcelUploadAjustes.jsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Box, Button, Input, Table, Thead, Tbody, Tr, Th, Td,
-  Text, HStack, useToast
+  Box, Heading, Table, Thead, Tbody, Tr, Th, Td,
+  Select, Input, Spinner, useToast, Text
 } from "@chakra-ui/react";
-import * as XLSX from "xlsx";
 import { supabase } from "../supabaseClient";
+import { useFlota } from "./FlotaContext";
 
-const ExcelUploadAjustes = () => {
-  const [rows, setRows] = useState([]);
-  const [nombreArchivo, setNombreArchivo] = useState("");
+const ORDEN_CUENTAS = [
+  "Casco", "Máquinas", "Electricidad", "Electrónicas",
+  "SEP", "Fonda", "MLC", "Aceite"
+];
+
+const AjusteCuentas = () => {
+  const { buques } = useFlota();
   const toast = useToast();
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const [selectedBuque, setSelectedBuque] = useState("");
+  const [selectedMes, setSelectedMes] = useState("");
+  const [selectedAnio, setSelectedAnio] = useState(new Date().getFullYear());
+  const [valores, setValores] = useState({});
+  const [loading, setLoading] = useState(false);
 
-    setNombreArchivo(file.name);
+  const meses = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  useEffect(() => {
+    if (selectedBuque && selectedMes && selectedAnio) {
+      cargarAjustes();
+    }
+  }, [selectedBuque, selectedMes, selectedAnio]);
 
-      const formatted = jsonData.map((row, idx) => {
-        const valor = String(row.valor_factura || "0").replace(",", ".");
-        return {
-          id_local: idx + 1, // solo para renderizado
-          buque_nombre: row.buque_nombre?.trim() || "",
-          cuenta: row.cuenta?.trim() || "",
-          mes: row.mes ? parseInt(row.mes, 10) : null,
-          anio: row.anio ? parseInt(row.anio, 10) : null,
-          valor_factura: isNaN(parseFloat(valor)) ? 0 : parseFloat(valor),
-        };
-      });
+  const cargarAjustes = async () => {
+    setLoading(true);
+    const nombreBuque = buques.find(b => b.id === selectedBuque)?.nombre;
+    const { data, error } = await supabase
+      .from("ajustes_cuentas")
+      .select()
+      .eq("buque_nombre", nombreBuque)
+      .eq("anio", selectedAnio)
+      .eq("mes", meses.indexOf(selectedMes) + 1);
 
-      setRows(formatted);
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const handleRemove = (id_local) => {
-    setRows(rows.filter(r => r.id_local !== id_local));
-  };
-
-  const handleSave = async () => {
-    if (rows.length === 0) {
-      toast({ title: "No hay datos para guardar", status: "warning" });
+    if (error) {
+      toast({ status: "error", title: "Error al cargar ajustes" });
+      setLoading(false);
       return;
     }
 
-    try {
-      const datos = rows.map(({ id_local, ...rest }) => rest);
-      const { error } = await supabase.from("ajustes_cuentas").upsert(datos, {
-        onConflict: ["buque_nombre", "cuenta", "mes", "anio"]
-      });
-      if (error) throw error;
+    const nuevosValores = {};
+    ORDEN_CUENTAS.forEach(cuenta => {
+      const ajuste = data?.find(d => d.cuenta === cuenta);
+      nuevosValores[cuenta] = ajuste?.real_acumulado || "";
+    });
+    setValores(nuevosValores);
+    setLoading(false);
+  };
 
-      toast({ title: "Ajustes guardados correctamente", status: "success" });
-      setRows([]);
-      setNombreArchivo("");
-    } catch (err) {
-      console.error(err);
-      toast({ title: "Error al guardar en Supabase", description: err.message, status: "error" });
+  const guardarAjuste = async (cuenta, valor) => {
+    if (!selectedBuque || !selectedMes || !selectedAnio || valor === "") return;
+
+    const nombreBuque = buques.find(b => b.id === selectedBuque)?.nombre;
+    const mesNum = meses.indexOf(selectedMes) + 1;
+
+    const { error } = await supabase.from("ajustes_cuentas").upsert({
+      buque_id: selectedBuque,
+      buque_nombre: nombreBuque,
+      cuenta,
+      real_acumulado: parseFloat(valor),
+      mes: mesNum,
+      anio: selectedAnio,
+    }, { onConflict: "buque_id,cuenta,mes,anio" });
+
+    if (error) {
+      console.error(error);
+      toast({ status: "error", title: `Error al guardar ${cuenta}` });
+    } else {
+      toast({ status: "success", title: `Guardado ${cuenta}` });
+    }
+  };
+
+  const handleChange = (cuenta, valor) => {
+    const valorNum = valor.replace(",", ".");
+    if (!isNaN(valorNum)) {
+      setValores(prev => ({ ...prev, [cuenta]: valorNum }));
+      guardarAjuste(cuenta, valorNum);
     }
   };
 
   return (
     <Box p={6} bg="white" borderRadius="md" boxShadow="md">
-      <Text fontSize="xl" fontWeight="bold" mb={4}>📊 Cargar Ajustes de Cuentas</Text>
+      <Heading size="md" mb={4}>🧮 Ajuste de cuentas – Real acumulado</Heading>
 
-      <Input type="file" accept=".xlsx,.xls" onChange={handleFileChange} mb={4} />
-      {nombreArchivo && <Text color="gray.600">Archivo: {nombreArchivo}</Text>}
+      <Box display="flex" gap={4} mb={4}>
+        <Select placeholder="Selecciona buque" value={selectedBuque} onChange={e => setSelectedBuque(e.target.value)}>
+          {buques.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+        </Select>
+        <Select value={selectedAnio} onChange={e => setSelectedAnio(Number(e.target.value))}>
+          {[2023, 2024, 2025].map(y => <option key={y} value={y}>{y}</option>)}
+        </Select>
+        <Select placeholder="Selecciona mes" value={selectedMes} onChange={e => setSelectedMes(e.target.value)}>
+          {meses.map(m => <option key={m} value={m}>{m}</option>)}
+        </Select>
+      </Box>
 
-      {rows.length > 0 && (
-        <>
-          <Table variant="striped" size="sm" mt={4}>
-            <Thead>
-              <Tr>
-                <Th>Buque</Th>
-                <Th>Cuenta</Th>
-                <Th>Mes</Th>
-                <Th>Año</Th>
-                <Th isNumeric>Valor Factura (€)</Th>
-                <Th>Acciones</Th>
+      {loading ? (
+        <Spinner />
+      ) : selectedBuque && selectedMes ? (
+        <Table size="sm">
+          <Thead>
+            <Tr>
+              <Th>Cuenta</Th>
+              <Th>Real acumulado (€)</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {ORDEN_CUENTAS.map(cuenta => (
+              <Tr key={cuenta}>
+                <Td>{cuenta}</Td>
+                <Td>
+                  <Input
+                    value={valores[cuenta] || ""}
+                    onChange={e => handleChange(cuenta, e.target.value)}
+                    placeholder="0.00"
+                  />
+                </Td>
               </Tr>
-            </Thead>
-            <Tbody>
-              {rows.map(r => (
-                <Tr key={r.id_local}>
-                  <Td>{r.buque_nombre}</Td>
-                  <Td>{r.cuenta}</Td>
-                  <Td>{r.mes}</Td>
-                  <Td>{r.anio}</Td>
-                  <Td isNumeric>{r.valor_factura.toLocaleString("es-ES",{style:"currency",currency:"EUR"})}</Td>
-                  <Td>
-                    <Button size="sm" colorScheme="red" onClick={() => handleRemove(r.id_local)}>Eliminar</Button>
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
-
-          <HStack mt={4}>
-            <Button onClick={handleSave} colorScheme="blue">💾 Guardar en Supabase</Button>
-          </HStack>
-        </>
+            ))}
+          </Tbody>
+        </Table>
+      ) : (
+        <Text>Selecciona buque, mes y año para comenzar.</Text>
       )}
     </Box>
   );
 };
 
-export default ExcelUploadAjustes;
+export default AjusteCuentas;

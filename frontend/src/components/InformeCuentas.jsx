@@ -1,14 +1,15 @@
 // src/components/InformeCuentas.jsx
 import React, { useEffect, useState } from "react";
 import {
-  Box, Table, Thead, Tbody, Tr, Th, Td, Heading, Spinner, Text, Select,
-  Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody,
-  Button
+  Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Select,
+  Spinner, Text, Modal, ModalOverlay, ModalContent,
+  ModalHeader, ModalCloseButton, ModalBody, ModalFooter,
+  Button, HStack, useDisclosure, useToast
 } from "@chakra-ui/react";
 import { ExternalLinkIcon } from "@chakra-ui/icons";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../supabaseClient";
 import { useFlota } from "./FlotaContext";
-import { motion, AnimatePresence } from "framer-motion";
 import InformeCuentasDetalles from "./InformeCuentasDetalles";
 import AjusteCuentas from "./AjusteCuentas";
 
@@ -16,272 +17,238 @@ const meses = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ];
-const mesesCorto = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+const mesesCorto = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 const ORDEN_CUENTAS = [
   "Casco", "Máquinas", "Electricidad", "Electrónicas",
   "SEP", "Fonda", "MLC", "Aceite"
 ];
 
-const InformeCuentas = () => {
+export default function InformeCuentas() {
   const { buques } = useFlota();
+  const toast = useToast();
   const [selectedBuque, setSelectedBuque] = useState("");
   const [selectedMes, setSelectedMes] = useState("");
   const [anioSeleccionado, setAnioSeleccionado] = useState(new Date().getFullYear());
   const [resumen, setResumen] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [detalle, setDetalle] = useState(null);
 
-  const [detalleCuenta, setDetalleCuenta] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [mesNumDetalle, setMesNumDetalle] = useState(null);
-
-  const [usuarioEmail, setUsuarioEmail] = useState("");
-  const [mostrarAjustes, setMostrarAjustes] = useState(false);
+  const { isOpen: isAjusteOpen, onOpen: onAjusteOpen, onClose: onAjusteClose } = useDisclosure();
 
   useEffect(() => {
-    const user = supabase.auth.getUser();
-    user.then(res => {
-      setUsuarioEmail(res.data?.user?.email || "");
-    });
-
     if (selectedBuque && selectedMes && anioSeleccionado) cargarResumen();
   }, [selectedBuque, selectedMes, anioSeleccionado]);
 
   const cargarResumen = async () => {
     setLoading(true);
+    const mesNum = meses.indexOf(selectedMes) + 1;
 
+    const { data: buqueData } = await supabase.from("solicitudes_compra").select();
+    const { data: asistenciaData } = await supabase.from("solicitudes_asistencia").select();
+    const { data: cotizaciones } = await supabase.from("cotizaciones_proveedor").select().eq("estado", "aceptada");
+    const { data: cotizacionesAsis } = await supabase.from("asistencias_proveedor").select().eq("estado", "aceptada");
     const { data: presupuestos } = await supabase
       .from("presupuesto_mensual")
-      .select("*")
-      .eq("buque_id", selectedBuque)
-      .eq("anio", anioSeleccionado);
-
-    const { data: compras } = await supabase
-      .from("solicitudes_compra")
-      .select("numero_pedido, buque_id, numero_cuenta");
-
-    const { data: asistencias } = await supabase
-      .from("solicitudes_asistencia")
-      .select("numero_ate, buque_id, numero_cuenta");
-
-    const { data: cotizaciones } = await supabase
-      .from("cotizaciones_proveedor")
-      .select("*")
-      .eq("estado", "aceptada");
-
-    const { data: cotizacionesAsis } = await supabase
-      .from("asistencias_proveedor")
-      .select("*")
-      .eq("estado", "aceptada");
-
-    const buqueNombreSel = buques.find(b => b.id === selectedBuque)?.nombre || "";
+      .select()
+      .eq("anio", anioSeleccionado)
+      .eq("buque_id", selectedBuque);
     const { data: ajustes } = await supabase
       .from("ajustes_cuentas")
-      .select("*")
-      .eq("buque_nombre", buqueNombreSel)
-      .eq("anio", anioSeleccionado);
+      .select()
+      .eq("anio", anioSeleccionado)
+      .eq("buque_nombre", buques.find(b => b.id === selectedBuque)?.nombre);
 
-    console.log("📌 Ajustes cargados:", ajustes);
-
-    const mesNum = meses.findIndex(m => m === selectedMes) + 1;
-
-    const cuentas = [
-      ...(presupuestos || []).map(p => p.cuenta),
-      ...(ajustes || []).map(a => a.cuenta),
-      ...(asistencias || []).map(a => a.numero_cuenta),
-      ...(compras || []).map(c => c.numero_cuenta),
-    ]
-      .filter(Boolean)
-      .filter(c => c !== "Inversiones");
-
-    const cuentasUnicas = [...new Set(cuentas)];
-
-    const resumenCuentas = cuentasUnicas.map(cuenta => {
+    const cuentas = ORDEN_CUENTAS;
+    const resultado = cuentas.map(cuenta => {
+      // Presupuesto acumulado hasta el mes seleccionado
       const presAcumulado = (presupuestos || [])
-        .filter(p =>
-          p.cuenta === cuenta &&
-          mesesCorto.indexOf(p.mes.slice(0,3)) + 1 <= mesNum
-        )
+        .filter(p => p.cuenta === cuenta && mesesCorto.indexOf(p.mes.slice(0, 3)) + 1 <= mesNum)
         .reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
 
-      let gastoPedidos = 0;
-      (cotizaciones || []).forEach(cot => {
-        const solicitud = (compras || []).find(
-          s => String(s.numero_pedido) === String(cot.numero_pedido)
+      // Gastos solo del mes en curso (no acumulados)
+      const gastoMesPedidos = cotizaciones.filter(c => {
+        const pedido = buqueData.find(s => s.numero_pedido === c.numero_pedido);
+        const fecha = new Date(c.fecha_aceptacion);
+        return (
+          pedido &&
+          pedido.buque_id === selectedBuque &&
+          pedido.numero_cuenta === cuenta &&
+          fecha.getMonth() + 1 === mesNum &&
+          fecha.getFullYear() === anioSeleccionado
         );
-        if (
-          solicitud &&
-          solicitud.buque_id === selectedBuque &&
-          solicitud.numero_cuenta === cuenta &&
-          cot.fecha_aceptacion
-        ) {
-          const f = new Date(cot.fecha_aceptacion);
-          if ((f.getMonth() + 1) <= mesNum && f.getFullYear() === anioSeleccionado) {
-            gastoPedidos += parseFloat(cot.valor_factura || cot.valor || 0);
-          }
-        }
-      });
+      }).reduce((acc, c) => acc + (parseFloat(c.valor_factura || c.valor) || 0), 0);
 
-      let gastoAsistencias = 0;
-      (asistencias || []).forEach(asistencia => {
-        if (asistencia.buque_id === selectedBuque && asistencia.numero_cuenta === cuenta) {
-          (cotizacionesAsis || []).forEach(cot => {
-            if (
-              String(cot.numero_asistencia) === String(asistencia.numero_ate) &&
-              cot.fecha_aceptacion
-            ) {
-              const f = new Date(cot.fecha_aceptacion);
-              if ((f.getMonth() + 1) <= mesNum && f.getFullYear() === anioSeleccionado) {
-                gastoAsistencias += parseFloat(cot.valor_factura || cot.valor || 0);
-              }
-            }
-          });
-        }
-      });
+      const gastoMesAsistencias = cotizacionesAsis.filter(c => {
+        const asistencia = asistenciaData.find(a => a.numero_ate === c.numero_asistencia);
+        const fecha = new Date(c.fecha_aceptacion);
+        return (
+          asistencia &&
+          asistencia.buque_id === selectedBuque &&
+          asistencia.numero_cuenta === cuenta &&
+          fecha.getMonth() + 1 === mesNum &&
+          fecha.getFullYear() === anioSeleccionado
+        );
+      }).reduce((acc, c) => acc + (parseFloat(c.valor_factura || c.valor) || 0), 0);
 
-      const ajustesFiltrados = (ajustes || [])
-        .filter(a => a.cuenta?.toLowerCase() === cuenta.toLowerCase() && a.mes <= mesNum);
+      // Ajuste acumulado del mes anterior
+      const ajusteAnterior = ajustes?.find(
+        a => a.cuenta === cuenta && a.mes === mesNum - 1
+      )?.real_acumulado || 0;
 
-      console.log(`🔍 Ajustes para cuenta: ${cuenta} (hasta mes ${mesNum}) →`, ajustesFiltrados);
+      // Gasto acumulado = ajuste (hasta mes anterior) + gastos del mes en curso
+      const gastoAcumulado = parseFloat(ajusteAnterior) + gastoMesPedidos + gastoMesAsistencias;
 
-      let gastoAjustes = 0;
-      ajustesFiltrados.forEach((ajuste, i) => {
-        let valor = String(ajuste.valor_factura).replace(",", ".");
-        let valorNumerico = parseFloat(valor);
-
-        if (isNaN(valorNumerico)) {
-          console.warn(`❌ Ajuste inválido [${i}]: cuenta=${ajuste.cuenta}, mes=${ajuste.mes}, valor="${ajuste.valor_factura}"`);
-        } else {
-          console.log(`✅ Ajuste válido [${i}]: ${ajuste.cuenta} - mes ${ajuste.mes} - valor=${valorNumerico}`);
-          gastoAjustes += valorNumerico;
-        }
-      });
-
-      const gastoAcumulado = gastoAjustes - (gastoPedidos + gastoAsistencias);
       const balance = presAcumulado - gastoAcumulado;
 
       return { cuenta, presAcumulado, gastoAcumulado, balance };
     });
 
-    resumenCuentas.sort((a, b) => {
-      const ia = ORDEN_CUENTAS.indexOf(a.cuenta);
-      const ib = ORDEN_CUENTAS.indexOf(b.cuenta);
-      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-    });
-
-    setResumen(resumenCuentas);
+    setResumen(resultado);
     setLoading(false);
   };
 
-  const abrirDetalle = (cuenta) => {
-    setDetalleCuenta(cuenta);
-    setMesNumDetalle(meses.findIndex(m => m === selectedMes) + 1);
-    setModalOpen(true);
+  // 🔹 Guardar manualmente los acumulados en ajustes_cuentas
+  const guardarAjustesMes = async () => {
+    if (!selectedBuque || !selectedMes) return;
+    if (!window.confirm(`¿Seguro que deseas guardar el acumulado de ${selectedMes}?`)) return;
+
+    const mesNum = meses.indexOf(selectedMes) + 1;
+    let guardados = 0;
+
+    for (const r of resumen) {
+      const { error } = await supabase.from("ajustes_cuentas").upsert(
+        {
+          buque_id: selectedBuque,
+          buque_nombre: buques.find(b => b.id === selectedBuque)?.nombre,
+          cuenta: r.cuenta,
+          mes: mesNum,
+          anio: anioSeleccionado,
+          real_acumulado: r.gastoAcumulado
+        },
+        { onConflict: "buque_id,cuenta,mes,anio" }
+      );
+
+      if (!error) guardados++;
+    }
+
+    toast({ status: "success", title: `✅ ${guardados} cuentas guardadas en ${selectedMes}` });
   };
-  const cerrarDetalle = () => setModalOpen(false);
+
+  const cerrarYActualizar = () => {
+    onAjusteClose();
+    cargarResumen();
+  };
 
   return (
-    <Box p={4} bg="white" boxShadow="md" borderRadius="md">
-      <Heading size="md" mb={4}>📑 Informe de Cuentas</Heading>
-
-      {usuarioEmail === "raguirre@cotenaval.es" && (
-        <Box mb={4} display="flex" gap={4}>
-          <Button
-            colorScheme={mostrarAjustes ? "red" : "blue"}
-            onClick={() => setMostrarAjustes(!mostrarAjustes)}
-          >
-            {mostrarAjustes ? "❌ Cerrar Ajuste de Cuentas" : "⚙️ Ajuste de Cuentas"}
+    <Box p={6} bg="white" borderRadius="md" boxShadow="md">
+      <HStack justify="space-between" mb={4}>
+        <Heading size="md">📊 Informe de Cuentas</Heading>
+        <HStack>
+          <Button onClick={guardarAjustesMes} colorScheme="blue" size="sm">
+            💾 Guardar acumulado en ajustes
           </Button>
-        </Box>
-      )}
+          <Button onClick={onAjusteOpen} colorScheme="yellow" size="sm">
+            ✏️ Editar ajustes mes anterior
+          </Button>
+        </HStack>
+      </HStack>
 
-      {mostrarAjustes && (
-        <Box mb={6} p={4} border="1px solid #ddd" borderRadius="md" bg="gray.50">
-          <AjusteCuentas />
-        </Box>
-      )}
-
-      <Box mb={4} display="flex" gap={4}>
-        <Select placeholder="Selecciona buque" value={selectedBuque} onChange={e => setSelectedBuque(e.target.value)} width="auto">
-          {buques.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+      <HStack spacing={4} mb={4}>
+        <Select placeholder="Selecciona buque" value={selectedBuque} onChange={e => setSelectedBuque(e.target.value)}>
+          {buques.map(b => (
+            <option key={b.id} value={b.id}>{b.nombre}</option>
+          ))}
         </Select>
-        <Select value={anioSeleccionado} onChange={e => setAnioSeleccionado(parseInt(e.target.value))} width="auto">
-          {[2023, 2024, 2025].map(a => <option key={a} value={a}>{a}</option>)}
+        <Select value={anioSeleccionado} onChange={e => setAnioSeleccionado(Number(e.target.value))}>
+          {[2023, 2024, 2025].map(y => (
+            <option key={y} value={y}>{y}</option>
+          ))}
         </Select>
-        <Select placeholder="Selecciona mes" value={selectedMes} onChange={e => setSelectedMes(e.target.value)} width="auto">
-          {meses.map(m => <option key={m} value={m}>{m}</option>)}
+        <Select placeholder="Selecciona mes" value={selectedMes} onChange={e => setSelectedMes(e.target.value)}>
+          {meses.map(m => (
+            <option key={m}>{m}</option>
+          ))}
         </Select>
-      </Box>
+      </HStack>
 
       {loading ? (
         <Spinner />
       ) : resumen.length === 0 ? (
         <Text>No hay datos disponibles.</Text>
       ) : (
-        <Box overflowX="auto">
-          <Table variant="striped" size="sm">
-            <Thead>
-              <Tr>
-                <Th>Cuenta</Th>
-                <Th>Presupuesto acumulado</Th>
-                <Th>Real acumulado</Th>
-                <Th>Balance</Th>
+        <Table size="sm" variant="simple">
+          <Thead>
+            <Tr>
+              <Th>Cuenta</Th>
+              <Th>Presupuesto acumulado</Th>
+              <Th>Gasto acumulado</Th>
+              <Th>Balance</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {resumen.map((r, idx) => (
+              <Tr key={idx}>
+                <Td>{r.cuenta}</Td>
+                <Td>{r.presAcumulado.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</Td>
+                <Td>
+                  <Box
+                    as={motion.div}
+                    whileHover={{ scale: 1.02, backgroundColor: "#edf2f7" }}
+                    p={1}
+                    borderRadius="md"
+                    cursor="pointer"
+                    onClick={() => setDetalle(r.cuenta)}
+                  >
+                    {r.gastoAcumulado.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                    <ExternalLinkIcon ml={2} color="gray.500" />
+                  </Box>
+                </Td>
+                <Td color={r.balance >= 0 ? "green.600" : "red.600"} fontWeight="bold">
+                  {r.balance.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                </Td>
               </Tr>
-            </Thead>
-            <Tbody>
-              {resumen.map((fila, idx) => (
-                <Tr key={idx}>
-                  <Td>{fila.cuenta}</Td>
-                  <Td>{Number(fila.presAcumulado || 0).toLocaleString("es-ES",{style:"currency",currency:"EUR"})}</Td>
-                  <Td>
-                    <Box as={motion.div} whileHover={{ scale: 1.05, backgroundColor: "#e3f2fd" }} whileTap={{ scale: 0.97 }}
-                      style={{cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", borderRadius:6, padding:"0 0.5rem", minWidth:110}}
-                      onClick={() => abrirDetalle(fila.cuenta)} title="Ver detalle acumulado">
-                      <span style={{color:"#1565c0", textDecoration:"underline"}}>
-                        {Number(fila.gastoAcumulado || 0).toLocaleString("es-ES",{style:"currency",currency:"EUR"})}
-                      </span>
-                      <ExternalLinkIcon ml={2} color="gray.500" />
-                    </Box>
-                  </Td>
-                  <Td style={{
-                    color: fila.balance >= 0 ? "green" : "red",
-                    fontWeight: "bold",
-                    background: fila.balance >= 0 ? "#e8f5e9" : "#ffebee"
-                  }}>
-                    {Number(fila.balance || 0).toLocaleString("es-ES",{style:"currency",currency:"EUR"})}
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
-        </Box>
+            ))}
+          </Tbody>
+        </Table>
       )}
 
       <AnimatePresence>
-        {modalOpen && (
-          <Modal isOpen={modalOpen} onClose={cerrarDetalle} size="6xl" motionPreset="slideInBottom">
+        {detalle && (
+          <Modal isOpen={!!detalle} onClose={() => setDetalle(null)} size="6xl" motionPreset="slideInBottom">
             <ModalOverlay />
             <ModalContent>
-              <ModalHeader>
-                Detalle acumulado - {detalleCuenta} / {selectedMes} {anioSeleccionado}
-              </ModalHeader>
+              <ModalHeader>Detalle: {detalle}</ModalHeader>
               <ModalCloseButton />
               <ModalBody>
                 <InformeCuentasDetalles
                   buque={selectedBuque}
                   buqueNombre={buques.find(b => b.id === selectedBuque)?.nombre}
-                  cuenta={detalleCuenta}
-                  mesNum={mesNumDetalle}
+                  cuenta={detalle}
+                  mesNum={meses.indexOf(selectedMes) + 1}
                   anio={anioSeleccionado}
-                  onBack={cerrarDetalle}
+                  onBack={() => setDetalle(null)}
                 />
               </ModalBody>
             </ModalContent>
           </Modal>
         )}
       </AnimatePresence>
+
+      <Modal isOpen={isAjusteOpen} onClose={cerrarYActualizar} size="4xl">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>✏️ Ajustes del mes anterior</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <AjusteCuentas />
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={cerrarYActualizar}>Cerrar</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   );
-};
-
-export default InformeCuentas;
+}
